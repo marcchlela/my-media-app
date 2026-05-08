@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MyFlix Mobile</title>
+  <link rel="stylesheet" href="/mobile/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1 id="homeBtn">MyFlix</h1>
+    <button id="refreshBtn" class="ghost-btn">Refresh</button>
+  </header>
+
+  <main class="page">
+    <input id="searchInput" class="search" type="search" placeholder="Search library..." />
+    <div class="mobile-filters">
+      <select id="mobileGenreFilter" class="mobile-select">
+        <option value="all">All Genres</option>
+      </select>
+      <select id="mobileSortFilter" class="mobile-select">
+        <option value="default">Sort: Default</option>
+        <option value="release_desc">Release Date: New to Old</option>
+        <option value="release_asc">Release Date: Old to New</option>
+        <option value="rating_desc">Highest Rated</option>
+        <option value="rating_asc">Lowest Rated</option>
+        <option value="runtime_asc">Shortest Runtime</option>
+        <option value="runtime_desc">Longest Runtime</option>
+      </select>
+    </div>
+    <p id="statusText" class="status">Loading library...</p>
+    <section id="content"></section>
+  </main>
+
+  <section id="playerView" class="player-view hidden">
+    <div class="player-panel">
+      <div class="player-header">
+        <button id="backBtn" class="ghost-btn">Back</button>
+        <h2 id="playerTitle"></h2>
+      </div>
+      <div id="playerStage" class="player-stage">
+        <video id="player" playsinline></video>
+        <div id="playerControls" class="player-controls">
+          <div class="player-timeline-wrap">
+            <input id="timelineRange" class="player-timeline" type="range" min="0" max="1000" value="0" />
+          </div>
+          <div class="player-control-row">
+            <div class="player-left-controls">
+              <button id="playPauseBtn" class="player-control-btn primary" type="button" aria-label="Play"></button>
+              <button id="skipBackBtn" class="player-control-btn" type="button" aria-label="Go back 5 seconds"></button>
+              <button id="skipForwardBtn" class="player-control-btn" type="button" aria-label="Go forward 5 seconds"></button>
+            </div>
+            <div class="player-center-controls">
+              <span id="currentTimeLabel" class="player-time">0:00</span>
+              <span id="durationLabel" class="player-time player-time-end">0:00</span>
+            </div>
+            <div class="player-right-controls">
+              <div class="player-volume-group">
+                <button id="muteBtn" class="player-control-btn subtle" type="button" aria-label="Mute"></button>
+                <div class="player-range-shell">
+                  <input id="volumeRange" class="player-range" type="range" min="0" max="100" value="100" />
+                </div>
+              </div>
+              <button id="fullscreenBtn" class="player-control-btn subtle" type="button" aria-label="Fullscreen"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p id="playerStatus" class="player-status"></p>
+      <div id="subtitleControls" class="subtitle-controls hidden"></div>
+    </div>
+  </section>
+
+  <nav class="mobile-nav" id="mobileNav">
+    <button data-view="home" class="nav-btn active">Home</button>
+    <button data-view="movies" class="nav-btn">Movies</button>
+    <button data-view="shows" class="nav-btn">TV Shows</button>
+    <button data-view="account" class="nav-btn">Account</button>
+  </nav>
+
+  <script src="/mobile/app.js"></script>
+</body>
+</html>

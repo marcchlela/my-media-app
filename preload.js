@@ -1,0 +1,45 @@
+// Security bridge between main and rendering process.
+
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  getAppContext: () => ipcRenderer.invoke('app:get-context'),
+  getLibrary: () => ipcRenderer.invoke('library:read'),
+  saveLibrary: (items) => ipcRenderer.invoke('library:write', items),
+  getLibraryStats: (items) => ipcRenderer.invoke('library:stats', items),
+  exportLibrary: (items) => ipcRenderer.invoke('library:export', items),
+  importLibrary: () => ipcRenderer.invoke('library:import'),
+  selectMedia: () => ipcRenderer.invoke('select-media'),
+  selectMediaFromCd: () => ipcRenderer.invoke('select-media-from-cd'),
+  selectSubtitleFiles: () => ipcRenderer.invoke('select-subtitles'),
+  selectPosterFile: () => ipcRenderer.invoke('select-poster'),
+  prepareSubtitleFile: (subtitlePath) => ipcRenderer.invoke('prepare-subtitle-file', subtitlePath),
+  scanMissingLibraryItems: (items) => ipcRenderer.invoke('library:scan-missing', items),
+  selectRelinkFile: (oldPath) => ipcRenderer.invoke('library:select-relink-file', oldPath),
+  autoRelinkLibrary: (items) => ipcRenderer.invoke('library:auto-relink', items),
+  getCurrentAccountUser: () => ipcRenderer.invoke('account:get-current-user'),
+  signUpAccount: (payload) => ipcRenderer.invoke('account:signup', payload),
+  logInAccount: (payload) => ipcRenderer.invoke('account:login', payload),
+  logOutAccount: () => ipcRenderer.invoke('account:logout'),
+  mergeLibraryAccountProgress: (items) => ipcRenderer.invoke('account:merge-library-progress', items),
+  refreshLibraryAccountProgress: (items) => ipcRenderer.invoke('account:refresh-library-progress', items),
+  saveAccountWatchProgress: (payload) => ipcRenderer.invoke('account:save-watch-progress', payload),
+  addAccountFavorite: (payload) => ipcRenderer.invoke('account:add-favorite', payload),
+  removeAccountFavorite: (payload) => ipcRenderer.invoke('account:remove-favorite', payload),
+  saveAccountPosterOverride: (payload) => ipcRenderer.invoke('account:save-poster-override', payload),
+  clearAccountPosterOverride: (payload) => ipcRenderer.invoke('account:clear-poster-override', payload),
+  syncLibraryAccountProgress: (items) => ipcRenderer.invoke('account:sync-library-progress', items),
+  tmdbMovieSearch: (query) => ipcRenderer.invoke('tmdb:movie:search', query),
+  tmdbTvSearch: (query) => ipcRenderer.invoke('tmdb:tv:search', query),
+  tmdbMovieDetails: (movieId) => ipcRenderer.invoke('tmdb:movie:details', movieId),
+  tmdbMovieImages: (movieId) => ipcRenderer.invoke('tmdb:movie:images', movieId),
+  tmdbMovieCredits: (movieId) => ipcRenderer.invoke('tmdb:movie:credits', movieId),
+  tmdbMovieVideos: (movieId) => ipcRenderer.invoke('tmdb:movie:videos', movieId),
+  openTrailerWindow: (url, title) => ipcRenderer.invoke('open-trailer-window', { url, title }),
+  tmdbTvImages: (tvId) => ipcRenderer.invoke('tmdb:tv:images', tvId),
+  tmdbTvCredits: (tvId) => ipcRenderer.invoke('tmdb:tv:credits', tvId),
+  tmdbTvEpisode: (tvId, seasonNumber, episodeNumber) =>
+    ipcRenderer.invoke('tmdb:tv:episode', tvId, seasonNumber, episodeNumber),
+  // Backward compatibility for existing renderer usage
+  selectFolder: () => ipcRenderer.invoke('select-media'),
+});

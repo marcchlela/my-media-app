@@ -1,0 +1,55 @@
+{
+  "name": "my-media-app",
+  "version": "0.3.0",
+  "description": "Desktop and web media library app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "keywords": [],
+  "author": "User",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^41.1.1",
+    "electron-builder": "^26.8.1"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  },
+  "build": {
+    "appId": "com.mymediaapp.desktop",
+    "productName": "My Media App",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "account-store.js",
+      "env-config.js",
+      "index.html",
+      "main.js",
+      "package.json",
+      "preload.js",
+      "renderer.js",
+      "style.css"
+    ],
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
+  }
+}

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My Media App</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="navbar">
+      <h1 id="homeLogo" class="logo">MyFlix</h1>
+
+      <div class="nav-actions">
+        <select id="genreFilter" class="nav-select">
+          <option value="all">All Genres</option>
+        </select>
+        <select id="sortFilter" class="nav-select">
+          <option value="default">Sort: Default</option>
+          <option value="release_desc">Release Date: New to Old</option>
+          <option value="release_asc">Release Date: Old to New</option>
+          <option value="rating_desc">Highest Rated</option>
+          <option value="rating_asc">Lowest Rated</option>
+          <option value="runtime_asc">Shortest Runtime</option>
+          <option value="runtime_desc">Longest Runtime</option>
+        </select>
+        <input id="searchInput" class="search-input" type="text" placeholder="Search library..." />
+        <div class="import-menu">
+          <button id="importBtn">+ Import</button>
+          <div id="importDropdown" class="import-dropdown">
+            <button id="importFromDeviceBtn" class="import-option">Import from device</button>
+            <button id="importFromCdBtn" class="import-option">Import from CD</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-body">
+      <aside class="sidebar">
+        <button id="sideHome" class="side-btn">
+          <span class="side-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3l9 7-1.5 2-1.5-1.17V20H6v-9.17L4.5 12 3 10l9-7zm-4 8v7h3v-4h2v4h3v-7l-4-3-4 3z"/>
+            </svg>
+          </span>
+          <span>Home</span>
+        </button>
+        <div class="side-divider"></div>
+        <button id="sideMovies" class="side-btn">
+          <span class="side-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16v12H4V6zm2 2v8h12V8H6zm-2-4h4v2H4V4zm6 0h4v2h-4V4zm6 0h4v2h-4V4zm-12 14h4v2H4v-2zm6 0h4v2h-4v-2zm6 0h4v2h-4v-2z"/>
+            </svg>
+          </span>
+          <span>Movies</span>
+        </button>
+        <div class="side-divider"></div>
+        <button id="sideShows" class="side-btn">
+          <span class="side-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 5h18v12H3V5zm2 2v8h14V7H5zm3 12h8v2H8v-2z"/>
+            </svg>
+          </span>
+          <span>TV Shows</span>
+        </button>
+        <div class="side-divider"></div>
+        <button id="sideSettings" class="side-btn">
+          <span class="side-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.14 12.94a7.96 7.96 0 0 0 .06-.94 7.96 7.96 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.62 7.62 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.57.23-1.11.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.41 1.06.72 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.57-.22 1.11-.53 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/>
+            </svg>
+          </span>
+          <span>Settings</span>
+        </button>
+        <div class="side-divider"></div>
+        <button id="sideAccount" class="side-btn">
+          <span class="side-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z"/>
+            </svg>
+          </span>
+          <span>Account</span>
+        </button>
+      </aside>
+
+      <div class="main">
+        <div id="content">
+          <h2>Movies</h2>
+          <div id="moviesSection" class="grid"></div>
+
+          <h2>TV Shows</h2>
+          <div id="showsSection" class="grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MyFlix Web</title>
+  <link rel="stylesheet" href="/web/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="navbar">
+      <h1 id="homeBtn" class="logo">MyFlix</h1>
+      <div class="nav-actions">
+        <div class="mobile-filters">
+          <select id="mobileGenreFilter" class="mobile-select">
+            <option value="all">All Genres</option>
+          </select>
+          <select id="mobileSortFilter" class="mobile-select">
+            <option value="default">Sort: Default</option>
+            <option value="release_desc">Release Date: New to Old</option>
+            <option value="release_asc">Release Date: Old to New</option>
+            <option value="rating_desc">Highest Rated</option>
+            <option value="rating_asc">Lowest Rated</option>
+            <option value="runtime_asc">Shortest Runtime</option>
+            <option value="runtime_desc">Longest Runtime</option>
+          </select>
+        </div>
+        <input id="searchInput" class="search" type="search" placeholder="Search library..." />
+        <button id="refreshBtn" class="ghost-btn">Refresh</button>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <aside id="mobileNav" class="sidebar">
+        <button data-view="home" class="nav-btn active">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3l9 7-1.5 2-1.5-1.17V20H6v-9.17L4.5 12 3 10l9-7zm-4 8v7h3v-4h2v4h3v-7l-4-3-4 3z"/>
+            </svg>
+          </span>
+          <span class="nav-label">Home</span>
+        </button>
+        <button data-view="movies" class="nav-btn">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16v12H4V6zm2 2v8h12V8H6zm-2-4h4v2H4V4zm6 0h4v2h-4V4zm6 0h4v2h-4V4zm-12 14h4v2H4v-2zm6 0h4v2h-4v-2zm6 0h4v2h-4v-2z"/>
+            </svg>
+          </span>
+          <span class="nav-label">Movies</span>
+        </button>
+        <button data-view="shows" class="nav-btn">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 5h18v12H3V5zm2 2v8h14V7H5zm3 12h8v2H8v-2z"/>
+            </svg>
+          </span>
+          <span class="nav-label">TV Shows</span>
+        </button>
+        <button data-view="account" class="nav-btn">
+          <span class="nav-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.14 12.94a7.96 7.96 0 0 0 .06-.94 7.96 7.96 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.62 7.62 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.57.23-1.11.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.41 1.06.72 1.63.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.57-.22 1.11-.53 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/>
+            </svg>
+          </span>
+          <span class="nav-label">Account</span>
+        </button>
+      </aside>
+
+      <main class="main">
+        <p id="statusText" class="status">Loading library...</p>
+        <section id="content"></section>
+      </main>
+    </div>
+  </div>
+
+  <section id="playerView" class="player-view hidden">
+    <div class="player-panel">
+      <div class="player-header">
+        <button id="backBtn" class="ghost-btn">Back</button>
+        <h2 id="playerTitle"></h2>
+      </div>
+      <div id="playerStage" class="player-stage">
+        <video id="player" playsinline></video>
+        <div id="playerControls" class="player-controls">
+          <div class="player-timeline-wrap">
+            <input id="timelineRange" class="player-timeline" type="range" min="0" max="1000" value="0" />
+          </div>
+          <div class="player-control-row">
+            <div class="player-left-controls">
+              <button id="playPauseBtn" class="player-control-btn primary" type="button" aria-label="Play"></button>
+              <button id="skipBackBtn" class="player-control-btn" type="button" aria-label="Go back 5 seconds"></button>
+              <button id="skipForwardBtn" class="player-control-btn" type="button" aria-label="Go forward 5 seconds"></button>
+            </div>
+            <div class="player-center-controls">
+              <span id="currentTimeLabel" class="player-time">0:00</span>
+              <span id="durationLabel" class="player-time player-time-end">0:00</span>
+            </div>
+            <div class="player-right-controls">
+              <div class="player-volume-group">
+                <button id="muteBtn" class="player-control-btn subtle" type="button" aria-label="Mute"></button>
+                <div class="player-range-shell">
+                  <input id="volumeRange" class="player-range" type="range" min="0" max="100" value="100" />
+                </div>
+              </div>
+              <button id="fullscreenBtn" class="player-control-btn subtle" type="button" aria-label="Fullscreen"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p id="playerStatus" class="player-status"></p>
+      <div id="subtitleControls" class="subtitle-controls hidden"></div>
+    </div>
+  </section>
+
+  <script src="/web/app.js"></script>
+</body>
+</html>
