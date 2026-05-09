@@ -5069,7 +5069,7 @@ function formatEpisodeLabel(file) {
 }
 
 function extractEpisodeTitle(name) {
-  const noExt = name.replace(/\.[^/.]+$/, "");
+  const noExt = String(name || '').replace(/\.(mp4|mkv|avi|mov|mpg|mpeg|vob|webm|m4v)$/i, '');
   const match = noExt.match(/S\d{1,2}E\d{1,2}/i);
   if (!match || match.index === undefined) return null;
 

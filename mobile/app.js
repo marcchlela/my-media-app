@@ -251,7 +251,7 @@ function formatEpisode(item) {
 }
 
 function extractEpisodeTitle(name) {
-  const base = String(name || '').replace(/\.[^/.]+$/, '');
+  const base = String(name || '').replace(/\.(mp4|mkv|avi|mov|mpg|mpeg|vob|webm|m4v)$/i, '');
   const match = base.match(/S\d{1,2}E\d{1,2}/i);
   if (!match || match.index === undefined) return '';
   const after = base.slice(match.index + match[0].length);
@@ -314,7 +314,7 @@ async function setShowFavorite(group, isFavorite) {
   await setFavoriteState(buildFavoritePayloadForShow(group), isFavorite);
   libraryItems = libraryItems.map((entry) => {
     if (!entry.isShow) return entry;
-    const entryKey = entry.showKey || (Number.isFinite(entry.tmdbId) ? `tmdb:${entry.tmdbId}` : normalize(entry.showName || entry.title || entry.name));
+    const entryKey = Number.isFinite(entry.tmdbId) ? `tmdb:${entry.tmdbId}` : (entry.showKey || normalize(entry.showName || entry.title || entry.name));
     return entryKey === group.key ? { ...entry, isFavorite } : entry;
   });
   return true;
@@ -414,7 +414,7 @@ function getShowGroups() {
   for (const item of libraryItems) {
     if (!item.isShow) continue;
     const keyBase = item.showName || item.title || item.name;
-    const key = item.showKey || (Number.isFinite(item.tmdbId) ? `tmdb:${item.tmdbId}` : normalize(keyBase));
+    const key = Number.isFinite(item.tmdbId) ? `tmdb:${item.tmdbId}` : (item.showKey || normalize(keyBase));
     if (!key) continue;
 
     if (!map.has(key)) {

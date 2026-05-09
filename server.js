@@ -90,6 +90,19 @@ async function loadLibrary() {
   return parsedCandidates[0].items;
 }
 
+function stripPerUserLibraryState(items) {
+  const input = Array.isArray(items) ? items : [];
+  return input.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const next = { ...item };
+    delete next.watchProgress;
+    delete next.customPosterPath;
+    delete next.customPosterTmdbPath;
+    delete next.isFavorite;
+    return next;
+  });
+}
+
 function parseCookies(headerValue) {
   const source = String(headerValue || '');
   const cookies = {};
@@ -153,7 +166,7 @@ function sanitizeLibraryItem(item, options = {}) {
     path: item?.path || '',
     isShow: !!item?.isShow,
     tmdbId: Number.isFinite(Number(item?.data?.id)) ? Number(item.data.id) : null,
-    showKey: item?.showKey || null,
+    showKey: Number.isFinite(Number(item?.data?.id)) ? `tmdb:${Number(item.data.id)}` : (item?.showKey || null),
     showName: item?.showName || null,
     episode: item?.episode || null,
     posterPath: item?.customPosterTmdbPath || item?.data?.poster_path || null,
@@ -657,7 +670,7 @@ app.get('/health', (_req, res) => {
 
 app.get('/library', async (req, res) => {
   try {
-    let library = await loadLibrary();
+    let library = stripPerUserLibraryState(await loadLibrary());
     const includeWatchProgress = !!req.account?.user?.id;
     if (req.account?.user?.id) {
       library = mergeWatchProgressForUser(library, req.account.user.id);
