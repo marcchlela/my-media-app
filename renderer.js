@@ -32,6 +32,7 @@ let activityLog = [];
 let activePlayerKeyHandler = null;
 const PLAYER_SEEK_SECONDS = 5;
 const WATCH_COMPLETE_THRESHOLD_PERCENT = 92;
+const MIN_RELIABLE_EPISODE_VOTES = 5;
 let librarySaveTimer = null;
 let searchRenderTimer = null;
 let cachedGenreOptionsKey = '';
@@ -280,12 +281,115 @@ function isTVShow(name) {
 }
 
 function parseEpisodeInfo(name) {
-  const match = name.match(/S(\d{1,2})E(\d{1,2})/i);
+  const match = String(name || '').match(/S(\d{1,2})E(\d{1,2})(?:\s*-\s*E?(\d{1,2}))?/i);
   if (!match) return null;
+  const episode = parseInt(match[2], 10);
+  const episodeEnd = match[3] ? parseInt(match[3], 10) : null;
   return {
     season: parseInt(match[1], 10),
-    episode: parseInt(match[2], 10),
+    episode,
+    ...(Number.isFinite(episodeEnd) && episodeEnd > episode ? { episodeEnd } : {}),
   };
+}
+
+function getEpisodeTitleText(value) {
+  if (!value) return '';
+  return extractEpisodeTitle(value) || String(value || '');
+}
+
+function getEpisodePartNumber(title) {
+  const text = String(title || '').trim();
+  let match = text.match(/\((\d+)\)\s*$/);
+  if (match) return parseInt(match[1], 10);
+  match = text.match(/\b(?:part|pt)\.?\s*(\d+)\s*$/i);
+  if (match) return parseInt(match[1], 10);
+  return null;
+}
+
+function stripEpisodePartSuffix(title) {
+  return String(title || '')
+    .replace(/\s*\((\d+)\)\s*$/i, '')
+    .replace(/\s*\b(?:part|pt)\.?\s*\d+\s*$/i, '')
+    .trim();
+}
+
+function getSiblingEpisodeNumbers(siblingEpisodes = []) {
+  return Array.from(new Set(
+    (Array.isArray(siblingEpisodes) ? siblingEpisodes : [])
+      .map((entry) => Number(entry?.episode?.episode ?? entry?.episode ?? entry))
+      .filter(Number.isFinite)
+  )).sort((a, b) => a - b);
+}
+
+function inferEpisodeRange(episodeInfo, title = '', siblingEpisodes = []) {
+  if (!episodeInfo?.season || !episodeInfo?.episode) return episodeInfo;
+  if (Number.isFinite(episodeInfo?.episodeEnd) && episodeInfo.episodeEnd > episodeInfo.episode) {
+    return episodeInfo;
+  }
+
+  if (getEpisodePartNumber(title) !== 1) {
+    return episodeInfo;
+  }
+
+  const episodeNumbers = getSiblingEpisodeNumbers(siblingEpisodes);
+  const nextExistingEpisode = episodeNumbers.find((value) => value > episodeInfo.episode);
+  const hasStandaloneNextEpisode = episodeNumbers.includes(episodeInfo.episode + 1);
+
+  if (hasStandaloneNextEpisode) {
+    return episodeInfo;
+  }
+
+  if (nextExistingEpisode === episodeInfo.episode + 2 || !Number.isFinite(nextExistingEpisode)) {
+    return {
+      ...episodeInfo,
+      episodeEnd: episodeInfo.episode + 1,
+    };
+  }
+
+  return episodeInfo;
+}
+
+function hasReliableEpisodeRating(details) {
+  const votes = Number(details?.vote_count);
+  const rating = Number(details?.vote_average);
+  return Number.isFinite(rating) && rating > 0 && Number.isFinite(votes) && votes >= MIN_RELIABLE_EPISODE_VOTES;
+}
+
+function normalizeEpisodeRangesInLibrary(items) {
+  const input = Array.isArray(items) ? items : [];
+  let changed = false;
+  const normalized = input.map((item) => ({ ...item }));
+  const groups = new Map();
+
+  normalized.forEach((item, index) => {
+    if (!item?.isShow || !item?.episode?.season || !item?.episode?.episode) return;
+    const key = `${item.showKey || item.showName || item.name || ''}::${item.episode.season}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ index, item });
+  });
+
+  for (const entries of groups.values()) {
+    const siblings = entries.map((entry) => entry.item);
+    entries.forEach(({ index, item }) => {
+      const nextEpisode = inferEpisodeRange(item.episode, getEpisodeTitleText(item.name), siblings);
+      if (nextEpisode?.episodeEnd && nextEpisode.episodeEnd !== item?.episode?.episodeEnd) {
+        normalized[index] = {
+          ...item,
+          episode: nextEpisode,
+        };
+        changed = true;
+      }
+    });
+  }
+
+  return {
+    items: normalized,
+    changed,
+  };
+}
+
+function adoptLibraryItems(items) {
+  return normalizeEpisodeRangesInLibrary(Array.isArray(items) ? items : []).items;
 }
 
 function normalizeShowName(name) {
@@ -310,6 +414,9 @@ function formatImportedEpisodeDisplayName(showName, episodeInfo, episodeTitle, f
 
   const season = String(episodeInfo.season).padStart(2, '0');
   const episode = String(episodeInfo.episode).padStart(2, '0');
+  const episodeCode = Number.isFinite(episodeInfo?.episodeEnd) && episodeInfo.episodeEnd > episodeInfo.episode
+    ? `S${season}E${episode}-E${String(episodeInfo.episodeEnd).padStart(2, '0')}`
+    : `S${season}E${episode}`;
   const safeShowName = String(showName || '').trim().replace(/\s+/g, '.');
   const safeTitle = String(episodeTitle || '')
     .trim()
@@ -317,12 +424,12 @@ function formatImportedEpisodeDisplayName(showName, episodeInfo, episodeTitle, f
     .replace(/\s+/g, '.');
 
   if (!safeShowName) {
-    return safeTitle ? `S${season}E${episode}.${safeTitle}` : fallbackName;
+    return safeTitle ? `${episodeCode}.${safeTitle}` : fallbackName;
   }
 
   return safeTitle
-    ? `${safeShowName}.S${season}E${episode}.${safeTitle}`
-    : `${safeShowName}.S${season}E${episode}`;
+    ? `${safeShowName}.${episodeCode}.${safeTitle}`
+    : `${safeShowName}.${episodeCode}`;
 }
 
 function getFileNameFromPath(filePath) {
@@ -739,6 +846,72 @@ async function fetchEpisodeDetails(showId, seasonNumber, episodeNumber) {
   return window.api.tmdbTvEpisode(showId, seasonNumber, episodeNumber);
 }
 
+function areCompanionEpisodeParts(firstTitle, secondTitle) {
+  const firstPart = getEpisodePartNumber(firstTitle);
+  const secondPart = getEpisodePartNumber(secondTitle);
+  if (firstPart !== 1 || secondPart !== 2) return false;
+  const firstBase = stripEpisodePartSuffix(firstTitle);
+  const secondBase = stripEpisodePartSuffix(secondTitle);
+  return !!firstBase && firstBase.toLowerCase() === secondBase.toLowerCase();
+}
+
+async function fetchEpisodeDetailsSummary(showId, episodeInfo, options = {}) {
+  if (!showId || !episodeInfo?.season || !episodeInfo?.episode) return null;
+  const sourceTitle = getEpisodeTitleText(options?.sourceName || options?.title || '');
+  let effectiveEpisodeInfo = inferEpisodeRange(episodeInfo, sourceTitle, options?.siblingEpisodes || []);
+  const startEpisode = effectiveEpisodeInfo.episode;
+  let endEpisode = Number.isFinite(effectiveEpisodeInfo?.episodeEnd) && effectiveEpisodeInfo.episodeEnd > startEpisode
+    ? effectiveEpisodeInfo.episodeEnd
+    : startEpisode;
+
+  const detailsList = [];
+  for (let episodeNumber = startEpisode; episodeNumber <= endEpisode; episodeNumber += 1) {
+    const details = await fetchEpisodeDetails(showId, effectiveEpisodeInfo.season, episodeNumber);
+    if (details) detailsList.push(details);
+  }
+  if (!detailsList.length) return null;
+
+  if (endEpisode === startEpisode) {
+    const firstDetails = detailsList[0];
+    const firstTitle = String(firstDetails?.name || sourceTitle || '').trim();
+    if (getEpisodePartNumber(firstTitle) === 1) {
+      const nextDetails = await fetchEpisodeDetails(showId, effectiveEpisodeInfo.season, startEpisode + 1);
+      if (nextDetails && areCompanionEpisodeParts(firstTitle, nextDetails?.name || '')) {
+        detailsList.push(nextDetails);
+        endEpisode = startEpisode + 1;
+        effectiveEpisodeInfo = {
+          ...effectiveEpisodeInfo,
+          episodeEnd: endEpisode,
+        };
+      }
+    }
+  }
+
+  if (detailsList.length === 1) {
+    return {
+      ...detailsList[0],
+      episodeEnd: effectiveEpisodeInfo?.episodeEnd || null,
+    };
+  }
+
+  const names = detailsList.map((item) => String(item?.name || '').trim()).filter(Boolean);
+  const overviews = detailsList.map((item) => String(item?.overview || '').trim()).filter(Boolean);
+  const runtimes = detailsList.map((item) => Number(item?.runtime)).filter(Number.isFinite);
+  const ratings = detailsList.map((item) => Number(item?.vote_average)).filter((value) => Number.isFinite(value) && value > 0);
+  const voteCounts = detailsList.map((item) => Number(item?.vote_count)).filter(Number.isFinite);
+
+  return {
+    ...detailsList[0],
+    name: names.join(' / '),
+    overview: overviews.join(' / '),
+    runtime: runtimes.length ? runtimes.reduce((sum, value) => sum + value, 0) : null,
+    vote_average: ratings.length ? (ratings.reduce((sum, value) => sum + value, 0) / ratings.length) : null,
+    vote_count: voteCounts.length ? voteCounts.reduce((sum, value) => sum + value, 0) : 0,
+    still_path: detailsList.find((item) => item?.still_path)?.still_path || detailsList[0]?.still_path || null,
+    episodeEnd: effectiveEpisodeInfo?.episodeEnd || null,
+  };
+}
+
 async function fetchMovieDetails(movieId) {
   if (!window.api?.tmdbMovieDetails) return null;
   return window.api.tmdbMovieDetails(movieId);
@@ -972,9 +1145,8 @@ function setRatingStars(container, rating, withNumber = false) {
   if (withNumber) {
     const number = document.createElement('span');
     number.classList.add('rating-number');
-    const truncated = Math.floor(starsOutOfFive * 10) / 10;
-    const display = Number.isFinite(truncated) ? truncated.toFixed(1) : '';
-    number.textContent = display ? `(${display})` : '';
+    const display = Number.isFinite(rating) ? rating.toFixed(1) : '';
+    number.textContent = display ? `(${display}/10)` : '';
     container.appendChild(number);
   }
 }
@@ -1303,12 +1475,15 @@ function getGenresFromGroup(group) {
 }
 
 function getRuntimeForItem(item) {
-  const runtime = item?.movieExtras?.details?.runtime ?? item?.data?.runtime;
+  const runtime = item?.measuredRuntimeMinutes ?? item?.movieExtras?.details?.runtime ?? item?.data?.runtime;
   return Number.isFinite(runtime) ? runtime : null;
 }
 
 function getRuntimeForGroup(group) {
-  const runtime = Array.isArray(group?.data?.episode_run_time) ? group.data.episode_run_time[0] : null;
+  const measured = Array.isArray(group?.episodes)
+    ? group.episodes.map((episode) => episode?.measuredRuntimeMinutes).find(Number.isFinite)
+    : null;
+  const runtime = measured ?? (Array.isArray(group?.data?.episode_run_time) ? group.data.episode_run_time[0] : null);
   return Number.isFinite(runtime) ? runtime : null;
 }
 
@@ -1557,6 +1732,24 @@ function updateWatchProgressForPath(filePath, currentTime, duration, forceComple
   }
 }
 
+function updateMeasuredRuntimeForPath(filePath, durationSeconds) {
+  if (!filePath || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
+  const runtimeMinutes = Math.max(1, Math.round(durationSeconds / 60));
+  let changed = false;
+  currentLibrary = currentLibrary.map((entry) => {
+    if (entry.path !== filePath) return entry;
+    if (entry.measuredRuntimeMinutes === runtimeMinutes) return entry;
+    changed = true;
+    return {
+      ...entry,
+      measuredRuntimeMinutes: runtimeMinutes,
+    };
+  });
+  if (changed) {
+    scheduleLibrarySave();
+  }
+}
+
 function stripLibraryWatchProgress(items) {
   return Array.isArray(items)
     ? items.map((item) => ({ ...item, watchProgress: null }))
@@ -1756,17 +1949,21 @@ async function importFiles(files, sourceLabel, subtitleFiles = []) {
     let displayName = file.name;
 
     if (isShow && data?.id && episode?.season && episode?.episode) {
-      const episodeLookupKey = `${data.id}:${episode.season}:${episode.episode}`;
+      const episodeLookupKey = `${data.id}:${episode.season}:${episode.episode}:${episode.episodeEnd || ''}:${file.name}`;
       let episodeMeta = null;
       if (episodeMetadataCache.has(episodeLookupKey)) {
         episodeMeta = episodeMetadataCache.get(episodeLookupKey);
       } else {
         try {
-          episodeMeta = await fetchEpisodeDetails(data.id, episode.season, episode.episode);
+          episodeMeta = await fetchEpisodeDetailsSummary(data.id, episode, { sourceName: file.name });
         } catch (err) {
           console.error('Episode metadata fetch failed for:', file.name, err);
         }
         episodeMetadataCache.set(episodeLookupKey, episodeMeta || null);
+      }
+
+      if (episodeMeta?.episodeEnd && (!episode.episodeEnd || episodeMeta.episodeEnd > episode.episodeEnd)) {
+        episode.episodeEnd = episodeMeta.episodeEnd;
       }
 
       displayName = formatImportedEpisodeDisplayName(
@@ -1795,7 +1992,8 @@ async function importFiles(files, sourceLabel, subtitleFiles = []) {
     newCount += 1;
   }
 
-  currentLibrary = library;
+  const normalizedLibrary = normalizeEpisodeRangesInLibrary(library);
+  currentLibrary = normalizedLibrary.items;
   await window.api.saveLibrary(currentLibrary);
   if (newCount > 0) {
     addLog(`Imported ${newCount} item(s) from ${sourceLabel}.`);
@@ -2956,7 +3154,7 @@ async function refreshAccountState({ mergeProgress = false, persistLibrary = fal
   if (currentAccountUser && mergeProgress && window.api.refreshLibraryAccountProgress) {
     const result = await window.api.refreshLibraryAccountProgress(currentLibrary);
     if (Array.isArray(result?.items)) {
-      currentLibrary = result.items;
+      currentLibrary = adoptLibraryItems(result.items);
       if (persistLibrary && window.api.saveLibrary && !isSharedLibraryMode()) {
         await window.api.saveLibrary(currentLibrary);
       }
@@ -3125,7 +3323,7 @@ function openAccountAuthModal(mode) {
         await refreshAccountState({ mergeProgress: true, persistLibrary: true, syncProgress: true });
         if (window.api?.getLibrary) {
           const loaded = await window.api.getLibrary();
-          currentLibrary = Array.isArray(loaded) ? loaded : [];
+          currentLibrary = adoptLibraryItems(loaded);
         }
         close(true);
       } catch (err) {
@@ -3240,7 +3438,7 @@ function showAccountPage() {
     await refreshAccountState({ mergeProgress: false, persistLibrary: false, syncProgress: false });
     if (window.api?.getLibrary) {
       const loaded = await window.api.getLibrary();
-      currentLibrary = Array.isArray(loaded) ? loaded : [];
+      currentLibrary = adoptLibraryItems(loaded);
     }
     showAccountPage();
   });
@@ -3723,7 +3921,7 @@ function showSettings() {
         merged.push(item);
       }
 
-      currentLibrary = merged;
+      currentLibrary = adoptLibraryItems(merged);
       await window.api.saveLibrary(currentLibrary);
       addLog(`Imported ${result.items.length} items from library file.`);
       showHome(currentView);
@@ -4849,6 +5047,9 @@ async function showEpisodePlayer(file, onBack, options = {}) {
   });
 
   video.addEventListener('loadedmetadata', syncPlayerControls);
+  video.addEventListener('loadedmetadata', () => {
+    updateMeasuredRuntimeForPath(file.path, video.duration);
+  });
   video.addEventListener('play', () => {
     syncPlayerControls();
     showControls(true);
@@ -5062,15 +5263,18 @@ function formatEpisodeLabel(file) {
   if (file.episode) {
     const s = String(file.episode.season).padStart(2, '0');
     const e = String(file.episode.episode).padStart(2, '0');
+    const code = Number.isFinite(file.episode?.episodeEnd) && file.episode.episodeEnd > file.episode.episode
+      ? `S${s}E${e}-E${String(file.episode.episodeEnd).padStart(2, '0')}`
+      : `S${s}E${e}`;
     const title = extractEpisodeTitle(file.name);
-    return title ? `S${s}E${e}: ${title}` : `S${s}E${e}: ${file.name}`;
+    return title ? `${code}: ${title}` : `${code}: ${file.name}`;
   }
   return file.name;
 }
 
 function extractEpisodeTitle(name) {
   const noExt = String(name || '').replace(/\.(mp4|mkv|avi|mov|mpg|mpeg|vob|webm|m4v)$/i, '');
-  const match = noExt.match(/S\d{1,2}E\d{1,2}/i);
+  const match = noExt.match(/S\d{1,2}E\d{1,2}(?:\s*-\s*E?\d{1,2})?/i);
   if (!match || match.index === undefined) return null;
 
   const after = noExt.slice(match.index + match[0].length);
@@ -5288,6 +5492,8 @@ async function showShowDetails(group) {
     const seasonEpisodes = group.episodes.filter((episode) => episode?.episode?.season === seasonNumber);
 
     for (const ep of seasonEpisodes) {
+      const effectiveEpisode = inferEpisodeRange(ep.episode, getEpisodeTitleText(ep.name), seasonEpisodes);
+      const episodeView = effectiveEpisode === ep.episode ? ep : { ...ep, episode: effectiveEpisode };
       const row = document.createElement('div');
       row.classList.add('episode-row');
 
@@ -5296,7 +5502,7 @@ async function showShowDetails(group) {
 
       const thumb = document.createElement('img');
       thumb.classList.add('episode-thumb');
-      thumb.alt = `${formatEpisodeLabel(ep)} thumbnail`;
+      thumb.alt = `${formatEpisodeLabel(episodeView)} thumbnail`;
       thumb.loading = 'lazy';
 
       const thumbFallback = document.createElement('div');
@@ -5311,7 +5517,7 @@ async function showShowDetails(group) {
 
       const label = document.createElement('span');
       label.classList.add('episode-title');
-      label.textContent = formatEpisodeLabel(ep);
+      label.textContent = formatEpisodeLabel(episodeView);
       left.appendChild(label);
 
       const overview = document.createElement('p');
@@ -5345,7 +5551,8 @@ async function showShowDetails(group) {
       meta.classList.add('episode-meta');
 
       const epRating = document.createElement('span');
-      epRating.classList.add('rating-stars');
+      epRating.classList.add('episode-meta-note');
+      epRating.textContent = 'No reliable rating';
       meta.appendChild(epRating);
 
       const runtime = document.createElement('span');
@@ -5356,7 +5563,7 @@ async function showShowDetails(group) {
       playBtn.classList.add('episode-play');
       playBtn.textContent = 'Play';
       playBtn.addEventListener('click', () => {
-        showEpisodePlayer(ep, () => showShowDetails(group), { episodes: group.episodes });
+        showEpisodePlayer(episodeView, () => showShowDetails(group), { episodes: group.episodes });
       });
 
       row.appendChild(thumbWrap);
@@ -5365,11 +5572,23 @@ async function showShowDetails(group) {
       row.appendChild(playBtn);
       list.appendChild(row);
 
-      if (group.data?.id && ep.episode?.season && ep.episode?.episode) {
-        fetchEpisodeDetails(group.data.id, ep.episode.season, ep.episode.episode)
+      if (group.data?.id && effectiveEpisode?.season && effectiveEpisode?.episode) {
+        fetchEpisodeDetailsSummary(group.data.id, effectiveEpisode, {
+          sourceName: ep.name,
+          siblingEpisodes: seasonEpisodes,
+        })
           .then((details) => {
-            if (details?.vote_average) {
+            if (hasReliableEpisodeRating(details)) {
+              epRating.className = 'rating-stars';
+              epRating.textContent = '';
               setRatingStars(epRating, details.vote_average, true);
+            } else {
+              epRating.className = 'episode-meta-note';
+              epRating.textContent = 'No reliable rating';
+            }
+            const runtimeValue = details?.runtime || getRuntimeForItem(ep);
+            if (runtimeValue) {
+              runtime.textContent = `${runtimeValue} min`;
             }
             if (details?.runtime) {
               runtime.textContent = `${details.runtime} min`;
@@ -5773,7 +5992,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // on app start, render saved library
   const loaded = await window.api.getLibrary();
-  currentLibrary = Array.isArray(loaded) ? loaded : [];
+  const normalizedLoaded = normalizeEpisodeRangesInLibrary(loaded);
+  currentLibrary = normalizedLoaded.items;
+  if (normalizedLoaded.changed && !isSharedLibraryMode()) {
+    await window.api.saveLibrary(currentLibrary);
+  }
   await refreshAccountState({ mergeProgress: true, persistLibrary: true, syncProgress: true });
   showHome('all');
 

@@ -177,11 +177,13 @@ function sanitizeLibraryItem(item, options = {}) {
     mimeType: getVideoMimeType(item?.path || ''),
     releaseDate: item?.data?.release_date || item?.data?.first_air_date || null,
     rating: Number.isFinite(item?.data?.vote_average) ? item.data.vote_average : null,
-    runtime: Number.isFinite(item?.movieExtras?.details?.runtime)
+    runtime: Number.isFinite(item?.measuredRuntimeMinutes)
+      ? item.measuredRuntimeMinutes
+      : (Number.isFinite(item?.movieExtras?.details?.runtime)
       ? item.movieExtras.details.runtime
       : (Array.isArray(item?.data?.episode_run_time) && Number.isFinite(item.data.episode_run_time[0])
         ? item.data.episode_run_time[0]
-        : null),
+        : null)),
     genreIds: Array.isArray(item?.data?.genre_ids) ? item.data.genre_ids : [],
     genreNames: Array.isArray(item?.movieExtras?.details?.genres)
       ? item.movieExtras.details.genres.map((genre) => genre?.name).filter(Boolean)

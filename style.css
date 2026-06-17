@@ -1281,6 +1281,10 @@ body[data-theme="light"] .episode-progress-track {
   white-space: nowrap;
 }
 
+.episode-meta-note {
+  color: var(--muted);
+}
+
 .episode-play {
   height: 36px;
   padding: 0 16px;

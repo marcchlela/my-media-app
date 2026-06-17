@@ -3,6 +3,7 @@ const THEME_KEY = 'myMediaTheme';
 const SUBTITLE_SIZE_KEY = 'myMediaSubtitleFontSize';
 const WATCH_COMPLETE_THRESHOLD_PERCENT = 92;
 const SEARCH_RENDER_DEBOUNCE_MS = 120;
+const MIN_RELIABLE_EPISODE_VOTES = 5;
 
 const content = document.getElementById('content');
 const statusText = document.getElementById('statusText');
@@ -243,16 +244,109 @@ function normalize(text) {
     .replace(/[^a-z0-9]+/g, '');
 }
 
+function getEpisodeTitleText(value) {
+  if (!value) return '';
+  return extractEpisodeTitle(value) || String(value || '');
+}
+
+function getEpisodePartNumber(title) {
+  const text = String(title || '').trim();
+  let match = text.match(/\((\d+)\)\s*$/);
+  if (match) return parseInt(match[1], 10);
+  match = text.match(/\b(?:part|pt)\.?\s*(\d+)\s*$/i);
+  if (match) return parseInt(match[1], 10);
+  return null;
+}
+
+function stripEpisodePartSuffix(title) {
+  return String(title || '')
+    .replace(/\s*\((\d+)\)\s*$/i, '')
+    .replace(/\s*\b(?:part|pt)\.?\s*\d+\s*$/i, '')
+    .trim();
+}
+
+function getSiblingEpisodeNumbers(siblingEpisodes = []) {
+  return Array.from(new Set(
+    (Array.isArray(siblingEpisodes) ? siblingEpisodes : [])
+      .map((entry) => Number(entry?.episode?.episode ?? entry?.episode ?? entry))
+      .filter(Number.isFinite)
+  )).sort((a, b) => a - b);
+}
+
+function inferEpisodeRange(episodeInfo, title = '', siblingEpisodes = []) {
+  if (!episodeInfo?.season || !episodeInfo?.episode) return episodeInfo;
+  if (Number.isFinite(episodeInfo?.episodeEnd) && episodeInfo.episodeEnd > episodeInfo.episode) {
+    return episodeInfo;
+  }
+
+  if (getEpisodePartNumber(title) !== 1) {
+    return episodeInfo;
+  }
+
+  const episodeNumbers = getSiblingEpisodeNumbers(siblingEpisodes);
+  const nextExistingEpisode = episodeNumbers.find((value) => value > episodeInfo.episode);
+  const hasStandaloneNextEpisode = episodeNumbers.includes(episodeInfo.episode + 1);
+
+  if (hasStandaloneNextEpisode) {
+    return episodeInfo;
+  }
+
+  if (nextExistingEpisode === episodeInfo.episode + 2 || !Number.isFinite(nextExistingEpisode)) {
+    return {
+      ...episodeInfo,
+      episodeEnd: episodeInfo.episode + 1,
+    };
+  }
+
+  return episodeInfo;
+}
+
+function hasReliableEpisodeRating(details) {
+  const votes = Number(details?.vote_count);
+  const rating = Number(details?.vote_average);
+  return Number.isFinite(rating) && rating > 0 && Number.isFinite(votes) && votes >= MIN_RELIABLE_EPISODE_VOTES;
+}
+
+function normalizeEpisodeRangesInLibrary(items) {
+  const input = Array.isArray(items) ? items : [];
+  const normalized = input.map((item) => ({ ...item }));
+  const groups = new Map();
+
+  normalized.forEach((item, index) => {
+    if (!item?.isShow || !item?.episode?.season || !item?.episode?.episode) return;
+    const key = `${item.showKey || item.showName || item.name || ''}::${item.episode.season}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ index, item });
+  });
+
+  for (const entries of groups.values()) {
+    const siblings = entries.map((entry) => entry.item);
+    entries.forEach(({ index, item }) => {
+      const nextEpisode = inferEpisodeRange(item.episode, getEpisodeTitleText(item.name), siblings);
+      if (nextEpisode?.episodeEnd && nextEpisode.episodeEnd !== item?.episode?.episodeEnd) {
+        normalized[index] = {
+          ...item,
+          episode: nextEpisode,
+        };
+      }
+    });
+  }
+
+  return normalized;
+}
+
 function formatEpisode(item) {
   if (!item?.episode?.season || !item?.episode?.episode) return '';
   const s = String(item.episode.season).padStart(2, '0');
   const e = String(item.episode.episode).padStart(2, '0');
-  return `S${s}E${e}`;
+  return Number.isFinite(item.episode?.episodeEnd) && item.episode.episodeEnd > item.episode.episode
+    ? `S${s}E${e}-E${String(item.episode.episodeEnd).padStart(2, '0')}`
+    : `S${s}E${e}`;
 }
 
 function extractEpisodeTitle(name) {
   const base = String(name || '').replace(/\.(mp4|mkv|avi|mov|mpg|mpeg|vob|webm|m4v)$/i, '');
-  const match = base.match(/S\d{1,2}E\d{1,2}/i);
+  const match = base.match(/S\d{1,2}E\d{1,2}(?:\s*-\s*E?\d{1,2})?/i);
   if (!match || match.index === undefined) return '';
   const after = base.slice(match.index + match[0].length);
   return after.replace(/^[\s._-]+/, '').replace(/[\s._-]+/g, ' ').trim();
@@ -367,7 +461,7 @@ function createRatingStars(ratingOutOf10, withNumber = true) {
   if (withNumber) {
     const number = document.createElement('span');
     number.className = 'rating-number';
-    number.textContent = `(${starsOutOfFive.toFixed(1)})`;
+    number.textContent = `(${ratingOutOf10.toFixed(1)}/10)`;
     container.appendChild(number);
   }
 
@@ -1334,7 +1428,7 @@ async function loadLibrary({ render = true } = {}) {
   try {
     const res = await fetch('/library');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    libraryItems = await res.json();
+    libraryItems = normalizeEpisodeRangesInLibrary(await res.json());
     if (!currentUser) {
       libraryItems = stripLibraryWatchProgress(libraryItems);
     }
@@ -1496,6 +1590,71 @@ async function fetchEpisodeDetails(showId, seasonNumber, episodeNumber) {
   const details = await apiGet(`/api/tmdb/tv/${showId}/season/${seasonNumber}/episode/${episodeNumber}`);
   episodeDetailCache.set(key, details);
   return details;
+}
+
+function areCompanionEpisodeParts(firstTitle, secondTitle) {
+  const firstPart = getEpisodePartNumber(firstTitle);
+  const secondPart = getEpisodePartNumber(secondTitle);
+  if (firstPart !== 1 || secondPart !== 2) return false;
+  const firstBase = stripEpisodePartSuffix(firstTitle);
+  const secondBase = stripEpisodePartSuffix(secondTitle);
+  return !!firstBase && firstBase.toLowerCase() === secondBase.toLowerCase();
+}
+
+async function fetchEpisodeDetailsSummary(showId, episodeInfo, options = {}) {
+  if (!showId || !episodeInfo?.season || !episodeInfo?.episode) return null;
+  const sourceTitle = getEpisodeTitleText(options?.sourceName || options?.title || '');
+  let effectiveEpisodeInfo = inferEpisodeRange(episodeInfo, sourceTitle, options?.siblingEpisodes || []);
+  const startEpisode = effectiveEpisodeInfo.episode;
+  let endEpisode = Number.isFinite(effectiveEpisodeInfo?.episodeEnd) && effectiveEpisodeInfo.episodeEnd > startEpisode
+    ? effectiveEpisodeInfo.episodeEnd
+    : startEpisode;
+
+  const detailsList = (await Promise.all(
+    Array.from({ length: endEpisode - startEpisode + 1 }, (_value, index) =>
+      fetchEpisodeDetails(showId, effectiveEpisodeInfo.season, startEpisode + index))
+  )).filter(Boolean);
+
+  if (!detailsList.length) return null;
+  if (endEpisode === startEpisode) {
+    const firstDetails = detailsList[0];
+    const firstTitle = String(firstDetails?.name || sourceTitle || '').trim();
+    if (getEpisodePartNumber(firstTitle) === 1) {
+      const nextDetails = await fetchEpisodeDetails(showId, effectiveEpisodeInfo.season, startEpisode + 1);
+      if (nextDetails && areCompanionEpisodeParts(firstTitle, nextDetails?.name || '')) {
+        detailsList.push(nextDetails);
+        endEpisode = startEpisode + 1;
+        effectiveEpisodeInfo = {
+          ...effectiveEpisodeInfo,
+          episodeEnd: endEpisode,
+        };
+      }
+    }
+  }
+
+  if (detailsList.length === 1) {
+    return {
+      ...detailsList[0],
+      episodeEnd: effectiveEpisodeInfo?.episodeEnd || null,
+    };
+  }
+
+  const names = detailsList.map((item) => String(item?.name || '').trim()).filter(Boolean);
+  const overviews = detailsList.map((item) => String(item?.overview || '').trim()).filter(Boolean);
+  const runtimes = detailsList.map((item) => Number(item?.runtime)).filter(Number.isFinite);
+  const ratings = detailsList.map((item) => Number(item?.vote_average)).filter((value) => Number.isFinite(value) && value > 0);
+  const voteCounts = detailsList.map((item) => Number(item?.vote_count)).filter(Number.isFinite);
+
+  return {
+    ...detailsList[0],
+    name: names.join(' / '),
+    overview: overviews.join(' / '),
+    runtime: runtimes.length ? runtimes.reduce((sum, value) => sum + value, 0) : null,
+    vote_average: ratings.length ? (ratings.reduce((sum, value) => sum + value, 0) / ratings.length) : null,
+    vote_count: voteCounts.length ? voteCounts.reduce((sum, value) => sum + value, 0) : 0,
+    still_path: detailsList.find((item) => item?.still_path)?.still_path || detailsList[0]?.still_path || null,
+    episodeEnd: effectiveEpisodeInfo?.episodeEnd || null,
+  };
 }
 
 function renderDetailHeader(title, onBack) {
@@ -1777,6 +1936,8 @@ function renderShowDetailCard(group, meta) {
     const seasonEpisodes = group.episodes.filter((episode) => episode?.episode?.season === season);
 
     seasonEpisodes.forEach((episode) => {
+      const effectiveEpisode = inferEpisodeRange(episode.episode, getEpisodeTitleText(episode.name), seasonEpisodes);
+      const episodeView = effectiveEpisode === episode.episode ? episode : { ...episode, episode: effectiveEpisode };
       const row = document.createElement('div');
       row.className = 'episode-row';
 
@@ -1785,7 +1946,7 @@ function renderShowDetailCard(group, meta) {
 
       const thumb = document.createElement('img');
       thumb.className = 'episode-thumb';
-      thumb.alt = `${formatEpisodeLabel(episode)} thumbnail`;
+      thumb.alt = `${formatEpisodeLabel(episodeView)} thumbnail`;
       thumb.loading = 'lazy';
 
       const thumbFallback = document.createElement('div');
@@ -1800,7 +1961,7 @@ function renderShowDetailCard(group, meta) {
 
       const label = document.createElement('span');
       label.className = 'episode-label';
-      label.textContent = formatEpisodeLabel(episode);
+      label.textContent = formatEpisodeLabel(episodeView);
 
       const overview = document.createElement('p');
       overview.className = 'episode-overview';
@@ -1833,7 +1994,7 @@ function renderShowDetailCard(group, meta) {
 
       const ratingPlaceholder = document.createElement('span');
       ratingPlaceholder.className = 'episode-meta-note';
-      ratingPlaceholder.textContent = 'No rating';
+      ratingPlaceholder.textContent = 'No reliable rating';
 
       const runtime = document.createElement('span');
       runtime.className = 'episode-runtime';
@@ -1845,7 +2006,7 @@ function renderShowDetailCard(group, meta) {
       const play = document.createElement('button');
       play.className = 'episode-play';
       play.textContent = 'Play';
-      play.addEventListener('click', () => openPlayer(episode));
+      play.addEventListener('click', () => openPlayer(episodeView));
 
       left.appendChild(label);
       left.appendChild(overview);
@@ -1856,24 +2017,30 @@ function renderShowDetailCard(group, meta) {
       row.appendChild(play);
       episodeList.appendChild(row);
 
-      if (!showId || !episode?.episode?.season || !episode?.episode?.episode) return;
+      if (!showId || !effectiveEpisode?.season || !effectiveEpisode?.episode) return;
 
-      fetchEpisodeDetails(showId, episode.episode.season, episode.episode.episode)
+      fetchEpisodeDetailsSummary(showId, effectiveEpisode, {
+        sourceName: episode.name,
+        siblingEpisodes: seasonEpisodes,
+      })
         .then((episodeMeta) => {
           if (!episodeMeta || !document.body.contains(row)) return;
 
           metaBox.innerHTML = '';
-          const episodeRating = createRatingStars(episodeMeta.vote_average);
+          const episodeRating = hasReliableEpisodeRating(episodeMeta)
+            ? createRatingStars(episodeMeta.vote_average)
+            : null;
           if (episodeRating) {
             metaBox.appendChild(episodeRating);
           } else {
             const noRating = document.createElement('span');
             noRating.className = 'episode-meta-note';
-            noRating.textContent = 'No rating';
+            noRating.textContent = 'No reliable rating';
             metaBox.appendChild(noRating);
           }
 
-          runtime.textContent = episodeMeta.runtime ? `${episodeMeta.runtime} min` : '-- min';
+          const runtimeValue = episodeMeta.runtime || episode.runtime;
+          runtime.textContent = runtimeValue ? `${runtimeValue} min` : '-- min';
           metaBox.appendChild(runtime);
           overview.textContent = episodeMeta.overview || 'No episode description available.';
           if (episodeMeta.still_path) {
