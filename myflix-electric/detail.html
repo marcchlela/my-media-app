@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movie Details — MyFlix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/poster-frame.css">
+<link rel="stylesheet" href="css/cards.css">
+<link rel="stylesheet" href="css/detail.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar__brand">
+      <div class="sidebar__logo">MyFlix</div>
+      <div class="sidebar__tagline">Your cinema. Your way.</div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <a class="nav-link" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+        Lobby
+      </a>
+      <a class="nav-link" href="movies.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>
+        Movies
+      </a>
+      <a class="nav-link" href="series.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+        Series
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+        Watchlist
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Settings
+      </a>
+    </nav>
+
+    <div class="sidebar__footer">
+      <div class="now-playing-card">
+        <div class="now-playing-card__label">Now Playing</div>
+        <div class="now-playing-card__title">The Grand Budapest Hotel</div>
+        <div class="now-playing-card__meta">Resume at 45% · 1h 14m left</div>
+        <div class="progress-track"><div class="progress-track__fill" style="width:45%"></div></div>
+      </div>
+
+      <div class="user-chip">
+        <div class="user-chip__avatar">A</div>
+        <div class="user-chip__name">Welcome back<strong>Alex</strong></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+
+    <div class="topbar">
+      <div class="search-field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" placeholder="Search movies, series, genres…">
+      </div>
+      <div class="topbar-select">
+        All Genres
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <button class="btn-import">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
+        Import
+      </button>
+    </div>
+
+    <div class="page-content">
+
+      <section class="detail-hero">
+        <div class="detail-hero__poster">
+          <div class="lit-frame">
+            <div class="lit-frame__light"><img src="assets/svg/picture-light.svg" alt=""></div>
+            <div class="framed-poster framed-poster--detail" id="detail-poster">
+              <div class="framed-poster__placeholder" id="detail-poster-placeholder">THE GRAND<br>BUDAPEST<br>HOTEL</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-hero__info">
+          <div class="detail-kicker">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 1 21h22L12 2Z"/></svg>
+            <span id="detail-kicker-text">Featured Film</span>
+          </div>
+          <h1 class="detail-title" id="detail-title">The Grand Budapest Hotel</h1>
+          <div class="detail-meta-row" id="detail-meta-row">
+            <span>2014</span><span>Comedy, Drama</span><span>1h 39m</span><span>PG-13</span>
+          </div>
+          <div class="detail-badges-row" id="detail-badges-row">
+            <span class="detail-badge">CC Available</span>
+          </div>
+          <p class="detail-synopsis" id="detail-synopsis">
+            A legendary concierge at a famous European hotel, along with his protégé, becomes involved in a
+            series of escapades that unfold against the backdrop of a changing continent — an adventure
+            that begins with a murder and a stolen painting, and ends with a friendship that outlasts an era.
+          </p>
+
+          <div class="detail-actions">
+            <button class="btn-play">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              Resume Playing
+            </button>
+            <button class="btn-circle" title="Add to Watchlist">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button class="btn-circle" title="More options">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+            </button>
+          </div>
+
+          <div class="detail-progress-row">
+            <span>45% watched</span>
+            <div class="progress-track"><div class="progress-track__fill" style="width:45%"></div></div>
+            <span>1h 14m left</span>
+          </div>
+
+          <div class="detail-cast-list" id="detail-cast-list"></div>
+        </div>
+      </section>
+
+      <section class="content-section">
+        <div class="section-heading">
+          <span class="section-heading__title">More Like This</span>
+        </div>
+        <div class="rail" id="related-rail"></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/render.js"></script>
+<script src="js/detail.js"></script>
+</body>
+</html>

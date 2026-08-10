@@ -5,8 +5,10 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { execFileSync } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
+const { promisify } = require('util');
 const { pathToFileURL } = require('url');
+const ffprobeStatic = require('ffprobe-static');
 const {
   addFavoriteForUser,
   clearPosterOverrideForUser,
@@ -30,6 +32,53 @@ const libraryPath = () => path.join(app.getPath('userData'), 'library.json');
 const accountSessionPath = () => path.join(app.getPath('userData'), 'account-session.json');
 const sharedAccountSessionPath = () => path.join(app.getPath('userData'), 'shared-account-session.json');
 const SHARED_SERVER_URL = resolveSharedServerUrl();
+const execFileAsync = promisify(execFile);
+
+function getFfprobePath() {
+  const probePath = String(ffprobeStatic?.path || ffprobeStatic || '');
+  return probePath.includes('app.asar')
+    ? probePath.replace('app.asar', 'app.asar.unpacked')
+    : probePath;
+}
+
+async function probeMediaFile(filePath) {
+  const safePath = typeof filePath === 'string' ? path.resolve(filePath) : '';
+  if (!safePath || !fs.existsSync(safePath)) {
+    return { ok: false, error: 'Media file was not found.' };
+  }
+
+  try {
+    const { stdout } = await execFileAsync(getFfprobePath(), [
+      '-v', 'error',
+      '-print_format', 'json',
+      '-show_streams',
+      '-show_format',
+      safePath,
+    ], {
+      encoding: 'utf-8',
+      windowsHide: true,
+      timeout: 20000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    const parsed = JSON.parse(stdout || '{}');
+    const videoStream = Array.isArray(parsed.streams)
+      ? parsed.streams.find((stream) => stream?.codec_type === 'video')
+      : null;
+    const durationSeconds = Number(videoStream?.duration || parsed.format?.duration);
+    const width = Number(videoStream?.width);
+    const height = Number(videoStream?.height);
+
+    return {
+      ok: true,
+      width: Number.isFinite(width) && width > 0 ? width : null,
+      height: Number.isFinite(height) && height > 0 ? height : null,
+      durationSeconds: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : null,
+    };
+  } catch (err) {
+    console.error('Media probe failed:', safePath, err.message);
+    return { ok: false, error: 'Unable to inspect this media file.' };
+  }
+}
 
 function readStoredAccountSessionToken() {
   try {
@@ -550,6 +599,12 @@ ipcMain.handle('select-subtitles', async () => {
 ipcMain.handle('select-poster', async () => {
   if (!await isCurrentUserAdmin()) return null;
   return handleSelectPoster();
+});
+ipcMain.handle('media:probe', async (_event, filePath) => {
+  if (!await isCurrentUserAdmin()) {
+    return { ok: false, error: 'Administrator access is required.' };
+  }
+  return probeMediaFile(filePath);
 });
 ipcMain.handle('tmdb:movie:search', async (_event, query) => {
   const q = String(query || '').trim();

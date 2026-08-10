@@ -1,0 +1,46 @@
+<svg width="100" height="200" viewBox="0 0 100 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="sconceGlow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ffe9b8" stop-opacity="0.7"/>
+      <stop offset="45%" stop-color="#ffd98a" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ffc864" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sconceBrass" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5a3e1c"/>
+      <stop offset="50%" stop-color="#caa35c"/>
+      <stop offset="100%" stop-color="#5a3e1c"/>
+    </linearGradient>
+    <linearGradient id="shadeFabric" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e8d4a0"/>
+      <stop offset="100%" stop-color="#c4a86a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ambient glow behind both shades -->
+  <ellipse cx="50" cy="75" rx="60" ry="70" fill="url(#sconceGlow)"/>
+
+  <!-- wall mounting plate -->
+  <rect x="44" y="120" width="12" height="60" rx="3" fill="url(#sconceBrass)"/>
+  <ellipse cx="50" cy="178" rx="14" ry="5" fill="#3a2a14" opacity="0.6"/>
+
+  <!-- left arm -->
+  <path d="M50,135 Q30,130 26,108" stroke="url(#sconceBrass)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <!-- right arm -->
+  <path d="M50,135 Q70,130 74,108" stroke="url(#sconceBrass)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+
+  <!-- left lamp shade (trapezoid, fabric look) -->
+  <path d="M14,108 L38,108 L34,68 L18,68 Z" fill="url(#shadeFabric)" stroke="#8a6530" stroke-width="1"/>
+  <ellipse cx="26" cy="68" rx="8" ry="2.5" fill="#f4e0a8" opacity="0.6"/>
+
+  <!-- right lamp shade -->
+  <path d="M62,108 L86,108 L82,68 L66,68 Z" fill="url(#shadeFabric)" stroke="#8a6530" stroke-width="1"/>
+  <ellipse cx="74" cy="68" rx="8" ry="2.5" fill="#f4e0a8" opacity="0.6"/>
+
+  <!-- bulb glow visible at base of each shade -->
+  <ellipse cx="26" cy="104" rx="9" ry="4" fill="#fff4d6" opacity="0.8"/>
+  <ellipse cx="74" cy="104" rx="9" ry="4" fill="#fff4d6" opacity="0.8"/>
+
+  <!-- finials -->
+  <circle cx="26" cy="66" r="2.5" fill="#caa35c"/>
+  <circle cx="74" cy="66" r="2.5" fill="#caa35c"/>
+</svg>

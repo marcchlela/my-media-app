@@ -1,0 +1,48 @@
+<svg width="260" height="280" viewBox="0 0 260 280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="leatherMain" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7a1f24"/>
+      <stop offset="50%" stop-color="#5a1418"/>
+      <stop offset="100%" stop-color="#3a0a0e"/>
+    </linearGradient>
+    <linearGradient id="leatherHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#9a3338" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#9a3338" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="woodLeg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1c120a"/>
+      <stop offset="50%" stop-color="#3a2414"/>
+      <stop offset="100%" stop-color="#1c120a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- back cushion -->
+  <path d="M40,60 Q40,20 130,20 Q220,20 220,60 L220,180 L40,180 Z" fill="url(#leatherMain)"/>
+  <path d="M40,60 Q40,20 130,20 Q220,20 220,60 L220,90 Q130,75 40,90 Z" fill="url(#leatherHighlight)"/>
+
+  <!-- tufted button details on backrest -->
+  <g fill="#2a0608" opacity="0.5">
+    <circle cx="90" cy="65" r="3"/>
+    <circle cx="170" cy="65" r="3"/>
+    <circle cx="90" cy="120" r="3"/>
+    <circle cx="170" cy="120" r="3"/>
+    <circle cx="130" cy="95" r="3"/>
+  </g>
+
+  <!-- rolled arms -->
+  <ellipse cx="35" cy="150" rx="28" ry="55" fill="url(#leatherMain)"/>
+  <ellipse cx="225" cy="150" rx="28" ry="55" fill="url(#leatherMain)"/>
+  <ellipse cx="30" cy="125" rx="22" ry="14" fill="url(#leatherHighlight)" opacity="0.7"/>
+  <ellipse cx="220" cy="125" rx="22" ry="14" fill="url(#leatherHighlight)" opacity="0.7"/>
+
+  <!-- seat cushion -->
+  <path d="M45,175 Q130,165 215,175 L220,225 Q130,240 40,225 Z" fill="url(#leatherMain)"/>
+  <path d="M45,175 Q130,165 215,175 L217,195 Q130,185 43,195 Z" fill="url(#leatherHighlight)" opacity="0.6"/>
+
+  <!-- seat front skirt -->
+  <path d="M40,225 Q130,240 220,225 L220,245 Q130,260 40,245 Z" fill="#2a0a0e"/>
+
+  <!-- wooden legs -->
+  <rect x="48" y="245" width="10" height="32" fill="url(#woodLeg)" transform="rotate(4 48 245)"/>
+  <rect x="200" y="245" width="10" height="32" fill="url(#woodLeg)" transform="rotate(-4 200 245)"/>
+</svg>

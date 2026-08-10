@@ -1,6 +1,6 @@
 {
   "name": "my-media-app",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Desktop and web media library app",
   "main": "main.js",
   "scripts": {
@@ -20,12 +20,16 @@
   },
   "dependencies": {
     "cors": "^2.8.6",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "ffprobe-static": "^3.1.0"
   },
   "build": {
     "appId": "com.mymediaapp.desktop",
     "productName": "My Media App",
     "asar": true,
+    "asarUnpack": [
+      "node_modules/ffprobe-static/bin/**/*"
+    ],
     "directories": {
       "output": "dist"
     },
@@ -34,6 +38,10 @@
       "env-config.js",
       "index.html",
       "main.js",
+      "myflix-cinema-designs-v2/**/*",
+      "myflix-electric/**/*",
+      "!myflix-electric/assets/generated-3d/sources/**/*",
+      "!myflix-electric/assets/generated-3d/*.png",
       "package.json",
       "preload.js",
       "renderer.js",
@@ -50,6 +58,11 @@
         "nsis",
         "portable"
       ]
+    },
+    "nsis": {
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "My Media App"
     }
   }
 }

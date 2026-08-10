@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movies — MyFlix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/wall.css">
+<link rel="stylesheet" href="css/poster-frame.css">
+<link rel="stylesheet" href="css/cards.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar__brand">
+      <div class="sidebar__logo">MyFlix</div>
+      <div class="sidebar__tagline">Your cinema. Your way.</div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <a class="nav-link" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+        Lobby
+      </a>
+      <a class="nav-link is-active" href="movies.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>
+        Movies
+      </a>
+      <a class="nav-link" href="series.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+        Series
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+        Watchlist
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Settings
+      </a>
+    </nav>
+
+    <div class="sidebar__footer">
+      <div class="now-playing-card">
+        <div class="now-playing-card__label">Now Playing</div>
+        <div class="now-playing-card__title">The Grand Budapest Hotel</div>
+        <div class="now-playing-card__meta">Resume at 45% · 1h 14m left</div>
+        <div class="progress-track"><div class="progress-track__fill" style="width:45%"></div></div>
+      </div>
+
+      <div class="user-chip">
+        <div class="user-chip__avatar">A</div>
+        <div class="user-chip__name">Welcome back<strong>Alex</strong></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+
+    <div class="topbar">
+      <div class="search-field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" placeholder="Search movies, series, genres…">
+      </div>
+      <div class="topbar-select">
+        All Genres
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="topbar-select">
+        Sort by
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <button class="btn-import">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
+        Import
+      </button>
+    </div>
+
+    <div class="page-content">
+
+      <section class="content-section">
+        <div class="section-heading">
+          <span class="section-heading__title">Movies</span>
+          <span class="section-heading__action" id="movie-count"></span>
+        </div>
+
+        <div class="poster-grid" id="movies-grid"></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/render.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const countEl = document.getElementById('movie-count');
+    if (countEl) countEl.textContent = MOVIES.length + ' titles';
+  });
+</script>
+</body>
+</html>

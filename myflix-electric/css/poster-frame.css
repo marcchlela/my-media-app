@@ -1,0 +1,83 @@
+/* ==========================================================================
+   poster-frame.css
+   The core reusable "framed poster" component using a 9-slice border-image.
+   The gold-frame.svg asset is 240x240 with a 20px border region, so the
+   border-image-slice value below MUST stay at 20 (or be scaled proportionally
+   if you swap in a different source resolution).
+   ========================================================================== */
+
+.framed-poster {
+  position: relative;
+  display: inline-block;
+  border-style: solid;
+  border-width: 16px;
+  border-image-source: url('../assets/svg/gold-frame.png');
+  border-image-slice: 20;
+  border-image-repeat: stretch;
+  box-shadow: var(--shadow-frame);
+  background: var(--color-bg-deep);
+  transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease);
+}
+
+.framed-poster__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: linear-gradient(160deg, #3a2a4a, #2a1a1a);
+}
+
+.framed-poster__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-3);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.3;
+  color: rgba(255,255,255,0.85);
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Wrapper that positions a picture-light above a framed-poster */
+.lit-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lit-frame__light {
+  width: 88%;
+  margin-bottom: -18px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.lit-frame__light img {
+  width: 100%;
+  display: block;
+}
+
+.lit-frame .framed-poster {
+  z-index: 1;
+}
+
+/* Hover lift for interactive posters */
+.framed-poster.is-interactive { cursor: pointer; }
+
+.framed-poster.is-interactive:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 0 22px 40px rgba(0,0,0,0.65);
+}
+
+/* Size variants */
+.framed-poster--hero { width: 230px; height: 230px; }
+.framed-poster--grid { width: 100%; aspect-ratio: 2/3; border-width: 12px; }
+.framed-poster--detail { width: 280px; height: 420px; border-width: 18px; }
+.framed-poster--small { width: 100%; aspect-ratio: 2/3; border-width: 10px; }

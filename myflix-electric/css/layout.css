@@ -1,0 +1,273 @@
+/* ==========================================================================
+   layout.css — app shell: sidebar, topbar, content regions
+   ========================================================================== */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+/* ---------- Sidebar ---------- */
+
+.sidebar {
+  width: 232px;
+  min-width: 232px;
+  background: var(--color-bg-deep);
+  border-right: 1px solid rgba(202, 163, 92, 0.12);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.sidebar__brand {
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+.sidebar__logo {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--color-brass-light);
+  background: linear-gradient(135deg, var(--color-brass-light), var(--color-brass));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sidebar__tagline {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  margin-top: var(--space-1);
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  border-left: 2px solid transparent;
+  transition: all 0.2s var(--ease);
+}
+
+.nav-link svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+.nav-link:hover {
+  color: var(--color-cream-dim);
+  background: rgba(202, 163, 92, 0.05);
+}
+
+.nav-link.is-active {
+  color: var(--color-brass-light);
+  border-left-color: var(--color-brass);
+  background: linear-gradient(90deg, rgba(202,163,92,0.12), transparent);
+}
+
+.sidebar__footer {
+  margin-top: auto;
+  padding: 0 var(--space-4);
+}
+
+.now-playing-card {
+  background: var(--surface-card);
+  border: 1px solid rgba(202,163,92,0.15);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.now-playing-card__label {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-brass);
+  margin-bottom: var(--space-2);
+}
+
+.now-playing-card__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-cream);
+  margin-bottom: var(--space-1);
+}
+
+.now-playing-card__meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.progress-track {
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-track__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-brass-dark), var(--color-brass-light));
+  border-radius: 2px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.user-chip__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-burgundy-light), var(--color-burgundy));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  border: 1.5px solid var(--color-brass);
+}
+
+.user-chip__name { font-size: 11px; color: var(--color-text-muted); }
+.user-chip__name strong { display: block; font-size: 13px; color: var(--color-cream); }
+
+/* ---------- Main / Topbar ---------- */
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(13, 8, 5, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(202,163,92,0.1);
+}
+
+.search-field {
+  flex: 1;
+  position: relative;
+  max-width: 520px;
+}
+
+.search-field svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--color-text-faint);
+}
+
+.search-field input {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(202,163,92,0.18);
+  border-radius: var(--radius-md);
+  padding: 10px 14px 10px 38px;
+  font-size: 13px;
+  color: var(--color-cream);
+  outline: none;
+  transition: border-color 0.2s var(--ease);
+}
+
+.search-field input::placeholder { color: var(--color-text-faint); }
+.search-field input:focus { border-color: var(--color-brass); }
+
+.topbar-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(202,163,92,0.18);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-cream-dim);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease);
+}
+
+.topbar-select:hover { border-color: rgba(202,163,92,0.4); }
+.topbar-select svg { width: 13px; height: 13px; opacity: 0.6; }
+
+.btn-import {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: linear-gradient(135deg, var(--color-brass-light), var(--color-brass));
+  color: #2a1a0a;
+  border-radius: var(--radius-md);
+  padding: 10px 18px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(202,163,92,0.25);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.btn-import:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(202,163,92,0.35);
+}
+
+.btn-import svg { width: 14px; height: 14px; }
+
+/* ---------- Content regions ---------- */
+
+.page-content {
+  padding: var(--space-6);
+  max-width: 1480px;
+}
+
+.content-section { margin-bottom: var(--space-7); }
+
+/* Horizontal scroll rail, used by Continue Watching, Movies, Series rows */
+.rail {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scroll-behavior: smooth;
+}
+
+.rail::-webkit-scrollbar { display: none; }
+
+/* Grid for the dedicated Movies / Series library pages */
+.poster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--space-5) var(--space-4);
+}
+
+@media (max-width: 1300px) {
+  .sidebar { width: 200px; min-width: 200px; }
+  .page-content { padding: var(--space-5); }
+}

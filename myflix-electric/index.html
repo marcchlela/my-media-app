@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyFlix — Your Cinema, Your Way</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/wall.css">
+<link rel="stylesheet" href="css/poster-frame.css">
+<link rel="stylesheet" href="css/cards.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar__brand">
+      <div class="sidebar__logo">MyFlix</div>
+      <div class="sidebar__tagline">Your cinema. Your way.</div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <a class="nav-link is-active" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+        Lobby
+      </a>
+      <a class="nav-link" href="movies.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>
+        Movies
+      </a>
+      <a class="nav-link" href="series.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+        Series
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+        Watchlist
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Settings
+      </a>
+    </nav>
+
+    <div class="sidebar__footer">
+      <div class="now-playing-card">
+        <div class="now-playing-card__label">Now Playing</div>
+        <div class="now-playing-card__title">The Grand Budapest Hotel</div>
+        <div class="now-playing-card__meta">Resume at 45% · 1h 14m left</div>
+        <div class="progress-track"><div class="progress-track__fill" style="width:45%"></div></div>
+      </div>
+
+      <div class="user-chip">
+        <div class="user-chip__avatar">A</div>
+        <div class="user-chip__name">Welcome back<strong>Alex</strong></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+
+    <div class="topbar">
+      <div class="search-field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" placeholder="Search movies, series, genres…">
+      </div>
+      <div class="topbar-select">
+        All Genres
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="topbar-select">
+        Sort by
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <button class="btn-import">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
+        Import
+      </button>
+    </div>
+
+    <div class="page-content">
+
+      <!-- ============ NOW SHOWING HERO ============ -->
+      <section class="content-section">
+        <div class="section-heading">
+          <span class="section-heading__title">Now Showing</span>
+        </div>
+
+        <div class="hero-room wood-wall">
+          <div class="hero-room__left">
+            <img class="hero-room__lamp" src="assets/svg/standing-lamp.svg" alt="">
+            <img class="hero-room__armchair" src="assets/svg/armchair.svg" alt="">
+          </div>
+
+          <div class="hero-room__center" id="hero-carousel">
+            <div class="ticket-panel">
+              <div class="ticket-panel__badge">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 1 21h22L12 2Z"/></svg>
+                Featured
+              </div>
+              <h2 class="ticket-panel__title">The Grand<br>Budapest Hotel</h2>
+              <div class="ticket-panel__meta">
+                <span>2014</span><span>Comedy, Drama</span><span>1h 39m</span><span>PG-13</span>
+              </div>
+              <p class="ticket-panel__desc">A legendary concierge and his lobby boy get caught up in a heist and a family legacy in a fading European hotel.</p>
+              <div class="ticket-panel__actions">
+                <button class="btn-play">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                  Play Now
+                </button>
+                <button class="btn-circle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="lit-frame">
+              <div class="lit-frame__light"><img src="assets/svg/picture-light.svg" alt=""></div>
+              <div class="framed-poster framed-poster--hero is-interactive">
+                <div class="framed-poster__placeholder" style="background:linear-gradient(160deg,#d9b96a,#8a5a2a)">THE GRAND<br>BUDAPEST<br>HOTEL</div>
+              </div>
+            </div>
+
+            <div class="lit-frame">
+              <div class="lit-frame__light"><img src="assets/svg/picture-light.svg" alt=""></div>
+              <div class="framed-poster framed-poster--hero is-interactive">
+                <div class="framed-poster__placeholder" style="background:linear-gradient(160deg,#2a2a6a,#1a1a3a)">LA LA<br>LAND</div>
+              </div>
+            </div>
+
+            <div class="lit-frame">
+              <div class="lit-frame__light"><img src="assets/svg/picture-light.svg" alt=""></div>
+              <div class="framed-poster framed-poster--hero is-interactive">
+                <div class="framed-poster__placeholder" style="background:linear-gradient(160deg,#3a3a3a,#1a1a1a)">THE SHAWSHANK<br>REDEMPTION</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-room__right">
+            <div class="hero-room__seat-glow"></div>
+            <img class="hero-room__sconce" src="assets/svg/wall-sconce.svg" alt="">
+          </div>
+        </div>
+
+        <div class="hero-dots" id="hero-dots">
+          <span class="hero-dot is-active"></span>
+          <span class="hero-dot"></span>
+          <span class="hero-dot"></span>
+        </div>
+      </section>
+
+      <!-- ============ CONTINUE WATCHING ============ -->
+      <section class="content-section">
+        <div class="section-heading">
+          <span class="section-heading__title">Continue Watching</span>
+          <span class="section-heading__action">See All →</span>
+        </div>
+
+        <div class="rail">
+          <div class="cw-card">
+            <div class="cw-card__bg" style="background:linear-gradient(160deg,#d9b96a,#8a5a2a)"></div>
+            <div class="cw-card__overlay"></div>
+            <div class="cw-card__play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+            <div class="cw-card__info">
+              <div class="cw-card__title">The Grand Budapest Hotel</div>
+              <div class="cw-card__sub">1h 14m left</div>
+              <div class="cw-card__progress"><div class="cw-card__progress-fill" style="width:45%"></div></div>
+            </div>
+          </div>
+
+          <div class="cw-card">
+            <div class="cw-card__bg" style="background:linear-gradient(160deg,#1a2a4a,#0a1020)"></div>
+            <div class="cw-card__overlay"></div>
+            <div class="cw-card__play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+            <div class="cw-card__info">
+              <div class="cw-card__title">Interstellar</div>
+              <div class="cw-card__sub">1h 02m left</div>
+              <div class="cw-card__progress"><div class="cw-card__progress-fill" style="width:62%"></div></div>
+            </div>
+          </div>
+
+          <div class="cw-card">
+            <div class="cw-card__bg" style="background:linear-gradient(160deg,#3a3a3a,#1a1a1a)"></div>
+            <div class="cw-card__overlay"></div>
+            <div class="cw-card__play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+            <div class="cw-card__info">
+              <div class="cw-card__title">The Godfather</div>
+              <div class="cw-card__sub">50m left</div>
+              <div class="cw-card__progress"><div class="cw-card__progress-fill" style="width:78%"></div></div>
+            </div>
+          </div>
+
+          <div class="cw-card">
+            <div class="cw-card__bg" style="background:linear-gradient(160deg,#2a4a2a,#0a1a0a)"></div>
+            <div class="cw-card__overlay"></div>
+            <div class="cw-card__play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+            <div class="cw-card__info">
+              <div class="cw-card__title">Amélie</div>
+              <div class="cw-card__sub">23m left</div>
+              <div class="cw-card__progress"><div class="cw-card__progress-fill" style="width:85%"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MOVIES ============ -->
+      <section class="content-section">
+        <div class="section-heading">
+          <span class="section-heading__title">Movies</span>
+          <span class="section-heading__action">View All →</span>
+        </div>
+
+        <div class="rail" id="movies-rail"></div>
+      </section>
+
+      <!-- ============ SERIES ============ -->
+      <section class="content-section">
+        <div class="section-heading">
+          <span class="section-heading__title">Series</span>
+          <span class="section-heading__action">View All →</span>
+        </div>
+
+        <div class="rail" id="series-rail"></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/render.js"></script>
+<script src="js/carousel.js"></script>
+</body>
+</html>

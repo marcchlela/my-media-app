@@ -1,0 +1,55 @@
+<svg width="220" height="140" viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="lightCone" cx="50%" cy="0%" r="85%">
+      <stop offset="0%" stop-color="#ffe9b8" stop-opacity="0.85"/>
+      <stop offset="35%" stop-color="#ffd98a" stop-opacity="0.4"/>
+      <stop offset="70%" stop-color="#ffc864" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#ffc864" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brassBar" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f0d28e"/>
+      <stop offset="45%" stop-color="#b9904c"/>
+      <stop offset="55%" stop-color="#8a6530"/>
+      <stop offset="100%" stop-color="#5a3e1c"/>
+    </linearGradient>
+    <linearGradient id="brassArm" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6e4d22"/>
+      <stop offset="50%" stop-color="#caa35c"/>
+      <stop offset="100%" stop-color="#6e4d22"/>
+    </linearGradient>
+    <radialGradient id="bulbGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff4d6"/>
+      <stop offset="60%" stop-color="#ffd98a"/>
+      <stop offset="100%" stop-color="#caa35c"/>
+    </radialGradient>
+  </defs>
+
+  <!-- light cone glow, cast downward onto poster below -->
+  <path d="M60,38 L160,38 L210,140 L10,140 Z" fill="url(#lightCone)"/>
+
+  <!-- wall mounting bracket (small, center top) -->
+  <rect x="103" y="2" width="14" height="10" rx="2" fill="url(#brassArm)"/>
+
+  <!-- horizontal support arm extending down and out -->
+  <path d="M110,10 L110,22 Q110,28 116,28 L140,28" stroke="url(#brassArm)" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M110,10 L110,22 Q110,28 104,28 L80,28" stroke="url(#brassArm)" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- main light bar (the long brass tube fixture) -->
+  <rect x="55" y="24" width="110" height="9" rx="4.5" fill="url(#brassBar)"/>
+  <rect x="55" y="24" width="110" height="3" rx="1.5" fill="#f4e0a8" opacity="0.7"/>
+
+  <!-- small decorative end caps -->
+  <circle cx="55" cy="28.5" r="5.5" fill="url(#brassArm)"/>
+  <circle cx="165" cy="28.5" r="5.5" fill="url(#brassArm)"/>
+
+  <!-- bulb glow points along the underside of the bar -->
+  <g opacity="0.9">
+    <ellipse cx="75" cy="34" rx="6" ry="3" fill="url(#bulbGlow)"/>
+    <ellipse cx="110" cy="34" rx="6" ry="3" fill="url(#bulbGlow)"/>
+    <ellipse cx="145" cy="34" rx="6" ry="3" fill="url(#bulbGlow)"/>
+  </g>
+
+  <!-- thin hanging support rods connecting bar visually to wall (subtle) -->
+  <line x1="80" y1="28" x2="80" y2="22" stroke="#6e4d22" stroke-width="1.5" opacity="0.5"/>
+  <line x1="140" y1="28" x2="140" y2="22" stroke="#6e4d22" stroke-width="1.5" opacity="0.5"/>
+</svg>

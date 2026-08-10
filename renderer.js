@@ -1,14 +1,20 @@
-let button;
+﻿let button;
 let importDropdown;
 let importFromDeviceBtn;
 let importFromCdBtn;
 let moviesSection;
 let showsSection;
 let continueSection;
+let featuredSection;
+let featuredShelf;
+let continueShelf;
+let moviesShelf;
+let showsShelf;
 let homeLogo;
 let moviesHeading;
 let showsHeading;
 let continueHeading;
+let featuredHeading;
 let sideMovies;
 let sideShows;
 let sideSettings;
@@ -30,9 +36,52 @@ let selectedGenreFilter = 'all';
 let selectedSort = 'default';
 let activityLog = [];
 let activePlayerKeyHandler = null;
+let featuredCarouselTimer = null;
+let cinemaAudioContext = null;
+let cinemaTransitionActive = false;
+const libraryManagerState = {
+  mode: 'overview',
+  query: '',
+  showKey: null,
+  season: null,
+  selected: new Set(),
+};
 const PLAYER_SEEK_SECONDS = 5;
 const WATCH_COMPLETE_THRESHOLD_PERCENT = 92;
 const MIN_RELIABLE_EPISODE_VOTES = 5;
+const HOME_RAIL_LIMIT = 12;
+const FEATURED_ROTATION_MS = 8500;
+const CINEMA_SOUND_KEY = 'cinemaSoundsEnabled';
+const FEATURED_AUTOPLAY_KEY = 'featuredCarouselAutoplay';
+const APP_THEME_KEY = 'appTheme';
+const APP_THEME_DEFAULT = 'default';
+const continueThumbnailCache = new Map();
+const APP_THEME_OPTIONS = [
+  {
+    id: 'default',
+    label: 'Default',
+    description: 'Current MyFlix look and layout.',
+    preview: '',
+  },
+  {
+    id: 'electric-lounge',
+    label: 'Electric Lounge',
+    description: 'Wood-paneled cinema with brass lights and gold poster frames.',
+    preview: 'myflix-electric/assets/generated-3d/walnut-wall-v2-web.webp',
+  },
+  {
+    id: 'indie-projector',
+    label: 'Indie Projector',
+    description: 'Moody charcoal cinema with muted red projector energy.',
+    preview: 'myflix-cinema-designs-v2/previews/design-2-indie-projector-preview.png',
+  },
+  {
+    id: 'private-screening',
+    label: 'Private Screening',
+    description: 'Sleek matte-black room with premium lightbox styling.',
+    preview: 'myflix-cinema-designs-v2/previews/design-3-private-screening-preview.png',
+  },
+];
 let librarySaveTimer = null;
 let searchRenderTimer = null;
 let cachedGenreOptionsKey = '';
@@ -86,6 +135,15 @@ function clearUiErrors() {
   document.querySelectorAll('.error-box').forEach((node) => node.remove());
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function isCurrentUserAdmin() {
   return !!currentAccountUser?.isAdmin;
 }
@@ -112,6 +170,63 @@ function formatPlayerTime(seconds) {
     return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }
   return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function normalizeQualityTags(tags) {
+  const order = ['IMAX', '4K', '2160p', '1440p', '1080p', '720p', '480p'];
+  const unique = Array.from(new Set((tags || []).filter(Boolean)));
+  return unique.sort((a, b) => {
+    const aIndex = order.indexOf(a);
+    const bIndex = order.indexOf(b);
+    return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+  });
+}
+
+function inferQualityTagsFromText(value) {
+  const text = String(value || '').toLowerCase();
+  const tags = [];
+  if (/\bimax\b/.test(text)) tags.push('IMAX');
+  if (/\b(4k|uhd|2160p|2160)\b/.test(text)) {
+    tags.push('4K');
+  } else if (/\b1440p\b/.test(text)) {
+    tags.push('1440p');
+  } else if (/\b1080p?\b/.test(text)) {
+    tags.push('1080p');
+  } else if (/\b720p?\b/.test(text)) {
+    tags.push('720p');
+  } else if (/\b480p?\b/.test(text)) {
+    tags.push('480p');
+  }
+  return normalizeQualityTags(tags);
+}
+
+function getMeasuredQualityTag(item) {
+  const width = Number(item?.measuredVideoWidth);
+  const height = Number(item?.measuredVideoHeight);
+  if (!Number.isFinite(width) && !Number.isFinite(height)) return null;
+  if (width >= 3800 || height >= 2000) return '4K';
+  if (height >= 1400) return '1440p';
+  if (height >= 1000) return '1080p';
+  if (height >= 700) return '720p';
+  if (height >= 460) return '480p';
+  return null;
+}
+
+function getQualityTagsForItem(item) {
+  return normalizeQualityTags([
+    ...(Array.isArray(item?.qualityTags) ? item.qualityTags : []),
+    ...inferQualityTagsFromText(`${item?.name || ''} ${item?.path || ''}`),
+    getMeasuredQualityTag(item),
+  ]);
+}
+
+function getQualityTagsForGroup(group) {
+  if (!Array.isArray(group?.episodes)) return [];
+  const tags = [];
+  for (const episode of group.episodes) {
+    tags.push(...getQualityTagsForItem(episode));
+  }
+  return normalizeQualityTags(tags).filter((tag) => tag === 'IMAX' || ['4K', '2160p', '1440p', '1080p', '720p', '480p'].includes(tag)).slice(0, 2);
 }
 
 function getPlayerIconSvg(name) {
@@ -155,7 +270,6 @@ window.addEventListener('error', (event) => {
   const msg = event?.error?.message || event?.message || 'An unexpected error occurred.';
   showUiError(msg);
 });
-
 function askYesNo(message, yesLabel = 'Yes', noLabel = 'No') {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -558,7 +672,7 @@ function normalizeTitleForCompare(value) {
     .toLowerCase()
     .replace(/\.[^/.]+$/, '')
     .replace(/[\[\](){}]/g, ' ')
-    .replace(/[:'"`’]/g, '')
+    .replace(/[:'"`\u2019]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -676,13 +790,17 @@ function buildTmdbBackdropUrl(backdropPath, size = 780) {
   return backdropPath ? `https://image.tmdb.org/t/p/w${size}${backdropPath}` : '';
 }
 
+function buildTmdbStillUrl(stillPath, size = 780) {
+  return stillPath ? `https://image.tmdb.org/t/p/w${size}${stillPath}` : '';
+}
+
 function formatTmdbCandidateFacts(result, { isShow = false } = {}) {
   const dateValue = isShow ? result?.first_air_date : result?.release_date;
   const year = dateValue ? String(dateValue).slice(0, 4) : 'Year unknown';
   const rating = Number.isFinite(result?.vote_average) && result.vote_average > 0
     ? `${result.vote_average.toFixed(1)}/10`
     : 'No rating';
-  return `${year} • ${rating}`;
+  return `${year} - ${rating}`;
 }
 
 function promptTmdbSelection({
@@ -983,7 +1101,7 @@ function formatTmdbPosterFacts(image) {
   const size = image?.width && image?.height ? `${image.width} x ${image.height}` : 'Unknown size';
   const language = image?.iso_639_1 ? image.iso_639_1.toUpperCase() : 'No language';
   const votes = Number(image?.vote_count) || 0;
-  return `${language} • ${size} • ${votes} vote${votes === 1 ? '' : 's'}`;
+  return `${language} - ${size} - ${votes} vote${votes === 1 ? '' : 's'}`;
 }
 
 function promptTmdbPosterChoice(results, title, originalName) {
@@ -1229,31 +1347,307 @@ function fillPeopleChips(chipsContainer, names, fallback = 'Unknown') {
   }
 }
 
+function fillPeopleCards(chipsContainer, people, fallback = 'Unknown') {
+  const list = Array.isArray(people) ? people.filter((person) => person?.name) : [];
+  if (getAppTheme() !== 'electric-lounge' || !list.length) {
+    fillPeopleChips(chipsContainer, list.map((person) => person?.name), fallback);
+    return;
+  }
+
+  chipsContainer.replaceChildren();
+  for (const person of list) {
+    const card = document.createElement('span');
+    card.className = 'details-person-chip has-portrait';
+
+    if (person.profile_path) {
+      const portrait = document.createElement('img');
+      portrait.className = 'details-person-portrait';
+      portrait.src = `https://image.tmdb.org/t/p/w185${person.profile_path}`;
+      portrait.alt = person.name;
+      portrait.loading = 'lazy';
+      card.appendChild(portrait);
+    } else {
+      const initials = document.createElement('span');
+      initials.className = 'details-person-initials';
+      initials.textContent = String(person.name).split(/\s+/).map((part) => part[0]).join('').slice(0, 2);
+      card.appendChild(initials);
+    }
+
+    const label = document.createElement('span');
+    label.textContent = person.name;
+    card.appendChild(label);
+    chipsContainer.appendChild(card);
+  }
+}
+
+function fillPeopleLoading(chipsContainer) {
+  if (!chipsContainer) return;
+  if (getAppTheme() !== 'electric-lounge') {
+    fillPeopleChips(chipsContainer, [], 'Loading...');
+    return;
+  }
+  chipsContainer.replaceChildren();
+  const loading = document.createElement('span');
+  loading.className = 'cinema-inline-loading';
+  loading.textContent = 'Preparing programme';
+  chipsContainer.appendChild(loading);
+}
+
+function createDetailsBadges(qualityTags = [], hasCc = false) {
+  const wrap = document.createElement('div');
+  wrap.className = 'details-badges';
+  for (const tag of normalizeQualityTags(qualityTags)) {
+    const badge = document.createElement('span');
+    badge.className = 'details-brass-badge';
+    badge.textContent = tag;
+    wrap.appendChild(badge);
+  }
+  if (hasCc) {
+    const badge = document.createElement('span');
+    badge.className = 'details-brass-badge';
+    badge.textContent = 'CC';
+    wrap.appendChild(badge);
+  }
+  return wrap;
+}
+
+function prefersReducedMotion() {
+  return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+function getCinemaSoundsEnabled() {
+  try {
+    return localStorage.getItem(CINEMA_SOUND_KEY) === '1';
+  } catch (err) {
+    return false;
+  }
+}
+
+function setCinemaSoundsEnabled(enabled) {
+  try {
+    localStorage.setItem(CINEMA_SOUND_KEY, enabled ? '1' : '0');
+  } catch (err) {
+    // Keep the toggle usable even when storage is unavailable.
+  }
+}
+
+function getFeaturedAutoplayEnabled() {
+  try {
+    return localStorage.getItem(FEATURED_AUTOPLAY_KEY) !== '0';
+  } catch (err) {
+    return true;
+  }
+}
+
+function setFeaturedAutoplayEnabled(enabled) {
+  try {
+    localStorage.setItem(FEATURED_AUTOPLAY_KEY, enabled ? '1' : '0');
+  } catch (err) {
+    // Ignore storage failures.
+  }
+}
+
+function playCinemaSound(type = 'click') {
+  if (!getCinemaSoundsEnabled()) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  cinemaAudioContext = cinemaAudioContext || new AudioContextClass();
+  const context = cinemaAudioContext;
+  const now = context.currentTime;
+
+  if (type === 'click') {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(220, now);
+    oscillator.frequency.exponentialRampToValueAtTime(120, now + 0.09);
+    gain.gain.setValueAtTime(0.045, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.11);
+    return;
+  }
+
+  const duration = type === 'projector' ? 0.65 : 0.85;
+  const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    const fade = 1 - (i / data.length);
+    data[i] = (Math.random() * 2 - 1) * fade * 0.16;
+  }
+  const source = context.createBufferSource();
+  const filter = context.createBiquadFilter();
+  const gain = context.createGain();
+  filter.type = type === 'projector' ? 'bandpass' : 'lowpass';
+  filter.frequency.value = type === 'projector' ? 1050 : 520;
+  gain.gain.setValueAtTime(type === 'projector' ? 0.06 : 0.08, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  source.buffer = buffer;
+  source.connect(filter).connect(gain).connect(context.destination);
+  source.start(now);
+}
+
+function ensureCinemaTransitionOverlay() {
+  let overlay = document.getElementById('cinemaTransition');
+  if (overlay) return overlay;
+
+  overlay = document.createElement('div');
+  overlay.id = 'cinemaTransition';
+  overlay.className = 'cinema-transition';
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.innerHTML = `
+    <div class="cinema-curtain cinema-curtain-left"></div>
+    <div class="cinema-curtain cinema-curtain-right"></div>
+    <div class="cinema-transition-center">
+      <span class="cinema-projector-beam"></span>
+      <span class="cinema-transition-label">MyFlix</span>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function waitForCinema(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runCinemaTransition(action, mode = 'page') {
+  if (typeof action !== 'function') return;
+  if (getAppTheme() !== 'electric-lounge' || prefersReducedMotion() || cinemaTransitionActive) {
+    return action();
+  }
+
+  cinemaTransitionActive = true;
+  const overlay = ensureCinemaTransitionOverlay();
+  overlay.className = `cinema-transition mode-${mode} is-active is-closing`;
+  document.body.classList.add('cinema-transitioning');
+  playCinemaSound(mode === 'playback' ? 'curtain' : 'click');
+
+  let actionError = null;
+  try {
+    await waitForCinema(mode === 'playback' ? 560 : 300);
+    const result = action();
+    if (result && typeof result.catch === 'function') {
+      result.catch((err) => console.error('Cinema navigation failed:', err));
+    }
+    if (mode === 'playback') playCinemaSound('projector');
+    overlay.classList.remove('is-closing');
+    overlay.classList.add('is-opening');
+    await waitForCinema(mode === 'playback' ? 700 : 360);
+  } catch (err) {
+    actionError = err;
+  } finally {
+    overlay.className = 'cinema-transition';
+    document.body.classList.remove('cinema-transitioning');
+    cinemaTransitionActive = false;
+  }
+  if (actionError) throw actionError;
+}
+
+function openWithCinemaTransition(renderFn) {
+  return runCinemaTransition(renderFn, 'page');
+}
+
+function createCinemaLoader(message = 'Preparing the screening room...') {
+  const loader = document.createElement('div');
+  loader.className = 'cinema-loader';
+  loader.innerHTML = `
+    <span class="cinema-loader-marquee" aria-hidden="true">
+      ${Array.from({ length: 9 }, () => '<i></i>').join('')}
+    </span>
+    <span>${message}</span>
+  `;
+  return loader;
+}
+
+function scrollHomeRail(targetId, direction) {
+  const rail = document.getElementById(targetId);
+  if (!rail) return;
+  const distance = Math.max(280, Math.round(rail.clientWidth * 0.82));
+  rail.scrollBy({ left: distance * direction, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+}
+
+function bindHomeShelfActions() {
+  document.querySelectorAll('[data-rail-target]').forEach((buttonNode) => {
+    buttonNode.addEventListener('click', () => {
+      const targetId = buttonNode.getAttribute('data-rail-target');
+      const direction = Number(buttonNode.getAttribute('data-rail-direction')) || 1;
+      scrollHomeRail(targetId, direction);
+    });
+  });
+  document.getElementById('seeAllMoviesBtn')?.addEventListener('click', () => showHome('movies'));
+  document.getElementById('seeAllShowsBtn')?.addEventListener('click', () => showHome('shows'));
+}
+
 function buildHomeLayout() {
   const content = document.getElementById('content');
   if (!content) return;
 
   content.innerHTML = `
-    <h2 id="continueHeading">Continue Watching</h2>
-    <div id="continueSection" class="continue-row"></div>
+    <section id="featuredShelf" class="home-shelf featured-shelf">
+      <div class="home-shelf-header"><h2 id="featuredHeading">Now Showing</h2></div>
+      <div id="featuredSection" class="featured-hero-wrap"></div>
+    </section>
 
-    <h2 id="moviesHeading">Movies</h2>
-    <div id="moviesSection" class="grid"></div>
+    <section id="continueShelf" class="home-shelf">
+      <div class="home-shelf-header">
+        <h2 id="continueHeading">Continue Watching</h2>
+        <div class="home-rail-controls">
+          <button class="home-rail-btn" data-rail-target="continueSection" data-rail-direction="-1" aria-label="Scroll Continue Watching left">&#8249;</button>
+          <button class="home-rail-btn" data-rail-target="continueSection" data-rail-direction="1" aria-label="Scroll Continue Watching right">&#8250;</button>
+        </div>
+      </div>
+      <div id="continueSection" class="continue-row home-horizontal-rail"></div>
+    </section>
 
-    <h2 id="showsHeading">TV Shows</h2>
-    <div id="showsSection" class="grid"></div>
+    <section id="moviesShelf" class="home-shelf">
+      <div class="home-shelf-header">
+        <h2 id="moviesHeading">Movies</h2>
+        <div class="home-shelf-actions">
+          <button id="seeAllMoviesBtn" class="home-see-all">See All Movies</button>
+          <div class="home-rail-controls">
+            <button class="home-rail-btn" data-rail-target="moviesSection" data-rail-direction="-1" aria-label="Scroll movies left">&#8249;</button>
+            <button class="home-rail-btn" data-rail-target="moviesSection" data-rail-direction="1" aria-label="Scroll movies right">&#8250;</button>
+          </div>
+        </div>
+      </div>
+      <div id="moviesSection" class="grid"></div>
+    </section>
+
+    <section id="showsShelf" class="home-shelf">
+      <div class="home-shelf-header">
+        <h2 id="showsHeading">TV Shows</h2>
+        <div class="home-shelf-actions">
+          <button id="seeAllShowsBtn" class="home-see-all">See All Shows</button>
+          <div class="home-rail-controls">
+            <button class="home-rail-btn" data-rail-target="showsSection" data-rail-direction="-1" aria-label="Scroll shows left">&#8249;</button>
+            <button class="home-rail-btn" data-rail-target="showsSection" data-rail-direction="1" aria-label="Scroll shows right">&#8250;</button>
+          </div>
+        </div>
+      </div>
+      <div id="showsSection" class="grid"></div>
+    </section>
   `;
 
   continueSection = document.getElementById('continueSection');
   continueHeading = document.getElementById('continueHeading');
+  featuredSection = document.getElementById('featuredSection');
+  featuredHeading = document.getElementById('featuredHeading');
   moviesSection = document.getElementById('moviesSection');
   showsSection = document.getElementById('showsSection');
   moviesHeading = document.getElementById('moviesHeading');
   showsHeading = document.getElementById('showsHeading');
+  featuredShelf = document.getElementById('featuredShelf');
+  continueShelf = document.getElementById('continueShelf');
+  moviesShelf = document.getElementById('moviesShelf');
+  showsShelf = document.getElementById('showsShelf');
+  bindHomeShelfActions();
 }
 
 function ensureHomeLayout() {
-  if (continueSection && moviesSection && showsSection) return;
+  if (continueSection && moviesSection && showsSection && featuredSection) return;
   buildHomeLayout();
 }
 
@@ -1264,14 +1658,28 @@ function applyView(view) {
   const showMovies = view === 'all' || view === 'movies';
   const showShows = view === 'all' || view === 'shows';
   const showContinue = view === 'all';
+  const showFeatured = view === 'all';
+
+  if (featuredShelf) featuredShelf.style.display = showFeatured ? '' : 'none';
+  if (continueShelf) continueShelf.style.display = showContinue ? '' : 'none';
+  if (moviesShelf) moviesShelf.style.display = showMovies ? '' : 'none';
+  if (showsShelf) showsShelf.style.display = showShows ? '' : 'none';
 
   if (continueHeading) continueHeading.style.display = showContinue ? '' : 'none';
   if (continueSection) continueSection.style.display = showContinue ? '' : 'none';
+  if (featuredHeading) featuredHeading.style.display = showFeatured ? '' : 'none';
+  if (featuredSection) featuredSection.style.display = showFeatured ? '' : 'none';
 
   if (moviesHeading) moviesHeading.style.display = showMovies ? '' : 'none';
   if (moviesSection) moviesSection.style.display = showMovies ? '' : 'none';
   if (showsHeading) showsHeading.style.display = showShows ? '' : 'none';
   if (showsSection) showsSection.style.display = showShows ? '' : 'none';
+
+  moviesSection?.classList.toggle('home-horizontal-rail', view === 'all');
+  showsSection?.classList.toggle('home-horizontal-rail', view === 'all');
+  document.querySelectorAll('.home-shelf-actions').forEach((node) => {
+    node.style.display = view === 'all' ? '' : 'none';
+  });
 
   setSideActive(view === 'movies' ? 'movies' : view === 'shows' ? 'shows' : null);
 }
@@ -1495,6 +1903,38 @@ function getReleaseDateForGroup(group) {
   return group?.data?.first_air_date || null;
 }
 
+function getYearFromDateValue(value) {
+  const text = String(value || '').trim();
+  return text ? text.slice(0, 4) : '';
+}
+
+function formatCompactGenres(genres, fallback = '') {
+  const value = Array.isArray(genres) ? genres.filter(Boolean).slice(0, 2).join(', ') : '';
+  return value || fallback;
+}
+
+function getFeaturedMovieMeta(item) {
+  const year = getYearFromDateValue(getReleaseDateForItem(item));
+  const genres = formatCompactGenres(getGenresFromItem(item));
+  const runtime = getRuntimeForItem(item);
+  return [year, genres, runtime ? `${runtime} min` : 'Movie'].filter(Boolean).join(' - ');
+}
+
+function getFeaturedShowMeta(group) {
+  const year = getYearFromDateValue(getReleaseDateForGroup(group));
+  const genres = formatCompactGenres(getGenresFromGroup(group));
+  const runtime = getRuntimeForGroup(group);
+  return [year, genres, runtime ? `${runtime} min episodes` : 'Series'].filter(Boolean).join(' - ');
+}
+
+function getFeaturedMovieDescription(item) {
+  return item?.movieExtras?.details?.overview || item?.data?.overview || 'No description available yet.';
+}
+
+function getFeaturedShowDescription(group) {
+  return group?.data?.overview || 'No description available yet.';
+}
+
 function compareNullableNumbers(a, b, direction = 'asc') {
   const aNum = Number.isFinite(a) ? a : null;
   const bNum = Number.isFinite(b) ? b : null;
@@ -1622,18 +2062,121 @@ function createCardProgressBar(percent) {
   return progress;
 }
 
+function createMediaCardStatusRow(tags = [], percent = 0) {
+  const safeTags = normalizeQualityTags(tags);
+  const safePercent = Number(percent) || 0;
+  if (!safeTags.length && safePercent <= 0) return null;
+
+  const row = document.createElement('div');
+  row.className = 'media-card-status';
+
+  if (safeTags.length) {
+    const tagWrap = document.createElement('div');
+    tagWrap.className = 'media-quality-tags';
+    for (const tag of safeTags) {
+      const badge = document.createElement('span');
+      badge.className = 'media-quality-tag';
+      badge.textContent = tag;
+      tagWrap.appendChild(badge);
+    }
+    row.appendChild(tagWrap);
+  }
+
+  if (safePercent > 0) {
+    const progress = createCardProgressBar(safePercent);
+    progress.classList.add('media-card-progress');
+    row.appendChild(progress);
+  }
+
+  return row;
+}
+
 function getContinueCardImageSrc(entry) {
   if (entry.type === 'movie') {
     return buildTmdbBackdropUrl(entry.item?.data?.backdrop_path, 780)
       || getMoviePosterSrc(entry.item, 342);
   }
-  return buildTmdbBackdropUrl(entry.group?.data?.backdrop_path, 780)
+  return buildTmdbStillUrl(entry.episode?.tmdbStillPath, 780)
+    || buildTmdbBackdropUrl(entry.group?.data?.backdrop_path, 780)
     || getShowPosterSrc(entry.group, 342);
+}
+
+function getContinueCardThumbnailKey(entry) {
+  return entry.type === 'movie'
+    ? `movie:${entry.item?.path || entry.item?.name || 'unknown'}`
+    : `show:${entry.group?.key || entry.group?.name || 'unknown'}:${entry.episode?.path || entry.episode?.name || 'episode'}`;
+}
+
+function pickRandomArrayItem(items) {
+  if (!Array.isArray(items) || !items.length) return null;
+  return items[Math.floor(Math.random() * items.length)] || null;
+}
+
+async function resolveContinueCardThumbnail(entry) {
+  if (entry.type === 'movie') {
+    const movieId = Number(entry.item?.data?.id);
+    if (!movieId) return getContinueCardImageSrc(entry);
+
+    try {
+      const images = await fetchMovieImages(movieId);
+      const backdrops = Array.isArray(images?.backdrops) ? images.backdrops : [];
+      const selectedBackdrop = pickRandomArrayItem(backdrops);
+      return buildTmdbBackdropUrl(selectedBackdrop?.file_path, 780) || getContinueCardImageSrc(entry);
+    } catch (err) {
+      console.error('Failed to load continue thumbnail for movie:', err);
+      return getContinueCardImageSrc(entry);
+    }
+  }
+
+  const showId = Number(entry.group?.data?.id);
+  const episode = entry.episode;
+  if (!showId || !episode?.episode?.season || !episode?.episode?.episode) {
+    return getContinueCardImageSrc(entry);
+  }
+
+  try {
+    const details = await fetchEpisodeDetailsSummary(showId, episode.episode, {
+      sourceName: episode.name,
+      siblingEpisodes: entry.group?.episodes || [],
+    });
+    const stillPath = details?.still_path || null;
+    if (stillPath) {
+      episode.tmdbStillPath = stillPath;
+    }
+    return buildTmdbStillUrl(stillPath, 780) || getContinueCardImageSrc(entry);
+  } catch (err) {
+    console.error('Failed to load continue thumbnail for episode:', err);
+    return getContinueCardImageSrc(entry);
+  }
+}
+
+function loadContinueCardThumbnail(entry, imageNode) {
+  if (!imageNode) return;
+  const cacheKey = getContinueCardThumbnailKey(entry);
+  const cached = continueThumbnailCache.get(cacheKey);
+  if (cached) {
+    imageNode.src = cached;
+    return;
+  }
+
+  resolveContinueCardThumbnail(entry)
+    .then((src) => {
+      if (!src) return;
+      continueThumbnailCache.set(cacheKey, src);
+      imageNode.src = src;
+    })
+    .catch((err) => {
+      console.error('Failed to resolve continue thumbnail:', err);
+    });
 }
 
 function createContinueCard(entry) {
   const card = document.createElement('div');
   card.classList.add('movie', 'continue-card', 'continue-card-landscape');
+
+  if (getAppTheme() === 'electric-lounge') {
+    card.classList.add('continue-card-electric');
+  }
 
   const media = document.createElement('div');
   media.classList.add('continue-media');
@@ -1644,6 +2187,7 @@ function createContinueCard(entry) {
   img.loading = 'lazy';
   img.decoding = 'async';
   media.appendChild(img);
+  loadContinueCardThumbnail(entry, img);
 
   const hasCc = entry.type === 'movie'
     ? hasSubtitlesOnItem(entry.item)
@@ -1652,34 +2196,311 @@ function createContinueCard(entry) {
     appendCcBadge(media);
   }
 
-  const overlay = document.createElement('div');
-  overlay.classList.add('continue-overlay');
+  const body = document.createElement('div');
+  body.classList.add('continue-overlay');
 
   const title = document.createElement('p');
   title.classList.add('continue-title');
   title.textContent = entry.type === 'movie'
     ? (entry.item.data?.title || entry.item.name)
     : (entry.group.data?.name || entry.group.name);
-  overlay.appendChild(title);
+  body.appendChild(title);
 
-  if (entry.subtitle) {
-    const subtitle = document.createElement('span');
-    subtitle.classList.add('continue-subtitle');
-    subtitle.textContent = entry.subtitle;
-    overlay.appendChild(subtitle);
-  }
+  const subtitle = document.createElement('span');
+  subtitle.classList.add('continue-subtitle');
+  subtitle.textContent = entry.type === 'movie'
+    ? (getRuntimeForItem(entry.item) ? `${getRuntimeForItem(entry.item)} min` : 'Movie')
+    : (entry.subtitle || 'Series');
+  body.appendChild(subtitle);
 
-  overlay.appendChild(createCardProgressBar(entry.percent));
-  media.appendChild(overlay);
+  const progressRow = document.createElement('div');
+  progressRow.className = 'continue-progress-row';
+
+  const progressBar = createCardProgressBar(entry.percent);
+  progressBar.classList.add('continue-progress-bar');
+
+  const percentLabel = document.createElement('span');
+  percentLabel.className = 'continue-progress-percent';
+  percentLabel.textContent = `${Math.round(entry.percent || 0)}%`;
+
+  progressRow.appendChild(progressBar);
+  progressRow.appendChild(percentLabel);
+  body.appendChild(progressRow);
   card.appendChild(media);
+  card.appendChild(body);
 
   if (entry.type === 'movie') {
-    card.addEventListener('click', () => showDetails(entry.item));
+    card.addEventListener('click', () => openWithCinemaTransition(() => showDetails(entry.item)));
   } else {
-    card.addEventListener('click', () => showShowDetails(entry.group));
+    card.addEventListener('click', () => openWithCinemaTransition(() => showShowDetails(entry.group)));
   }
 
   return card;
+}
+
+function getFeaturedEntries(library, showGroups) {
+  const entries = [];
+  const continueEntries = [];
+
+  for (const item of library) {
+    if (item.isShow) continue;
+    continueEntries.push({
+      type: 'movie',
+      item,
+      title: item.data?.title || item.name,
+      image: getMoviePosterSrc(item, 342),
+      backdrop: buildTmdbBackdropUrl(item.data?.backdrop_path, 780) || getMoviePosterSrc(item, 500),
+      score: Number(item.data?.vote_average) || 0,
+      progress: getWatchPercent(item),
+      meta: getFeaturedMovieMeta(item),
+      description: getFeaturedMovieDescription(item),
+      onOpen: () => openWithCinemaTransition(() => showDetails(item)),
+      onPlay: () => showEpisodePlayer(item, () => showDetails(item)),
+    });
+  }
+
+  for (const group of showGroups) {
+    const continueState = getShowContinueState(group);
+    continueEntries.push({
+      type: 'show',
+      group,
+      title: group.data?.name || group.name,
+      image: getShowPosterSrc(group, 342),
+      backdrop: buildTmdbBackdropUrl(group.data?.backdrop_path, 780) || getShowPosterSrc(group, 500),
+      score: Number(group.data?.vote_average) || 0,
+      progress: continueState?.percent || getShowWatchPercent(group),
+      meta: getFeaturedShowMeta(group),
+      description: getFeaturedShowDescription(group),
+      subtitle: continueState?.subtitle || '',
+      onOpen: () => openWithCinemaTransition(() => showShowDetails(group)),
+      onPlay: () => {
+        const nextEpisode = continueState?.episode || group.episodes?.[0];
+        if (nextEpisode) {
+          showEpisodePlayer(nextEpisode, () => showShowDetails(group), { episodes: group.episodes });
+        } else {
+          showShowDetails(group);
+        }
+      },
+    });
+  }
+
+  continueEntries.sort((a, b) => {
+    const progressDiff = (Number(b.progress) || 0) - (Number(a.progress) || 0);
+    if (progressDiff !== 0) return progressDiff;
+    return (Number(b.score) || 0) - (Number(a.score) || 0);
+  });
+
+  const unique = [];
+  const seen = new Set();
+  for (const entry of continueEntries) {
+    const key = entry.type === 'movie' ? `movie:${entry.item?.path}` : `show:${entry.group?.key}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(entry);
+  }
+
+  return unique.slice(0, 12);
+}
+
+function renderFeaturedHero(library, showGroups) {
+  if (!featuredSection) return;
+  featuredSection.replaceChildren();
+
+  const activeTheme = getAppTheme();
+  if (activeTheme !== 'electric-lounge') {
+    featuredSection.style.display = 'none';
+    if (featuredHeading) featuredHeading.style.display = 'none';
+    return;
+  }
+
+  const entries = getFeaturedEntries(library, showGroups);
+  if (!entries.length) {
+    featuredSection.style.display = 'none';
+    if (featuredHeading) featuredHeading.style.display = 'none';
+    return;
+  }
+
+  featuredSection.style.display = '';
+  if (featuredHeading) featuredHeading.style.display = '';
+
+  const hero = document.createElement('div');
+  hero.className = 'electric-featured';
+
+  const note = document.createElement('div');
+  note.className = 'electric-featured-note';
+  note.setAttribute('role', 'button');
+  note.setAttribute('tabindex', '0');
+  const posters = document.createElement('div');
+  posters.className = 'electric-featured-posters';
+
+  const navigation = document.createElement('div');
+  navigation.className = 'featured-carousel-nav';
+
+  const previousBtn = document.createElement('button');
+  previousBtn.type = 'button';
+  previousBtn.className = 'featured-carousel-arrow';
+  previousBtn.setAttribute('aria-label', 'Previous featured title');
+  previousBtn.innerHTML = '&#8249;';
+
+  const dots = document.createElement('div');
+  dots.className = 'featured-carousel-dots';
+
+  const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = 'featured-carousel-arrow';
+  nextBtn.setAttribute('aria-label', 'Next featured title');
+  nextBtn.innerHTML = '&#8250;';
+
+  navigation.appendChild(previousBtn);
+  navigation.appendChild(dots);
+  navigation.appendChild(nextBtn);
+
+  hero.appendChild(note);
+  hero.appendChild(posters);
+  hero.appendChild(navigation);
+  featuredSection.appendChild(hero);
+
+  let activeIndex = 0;
+
+  const createPosterButton = (entry, isMain) => {
+    const posterBtn = document.createElement('button');
+    posterBtn.className = `electric-featured-poster${isMain ? ' is-main' : ''}`;
+    posterBtn.type = 'button';
+    posterBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      entry.onOpen();
+    });
+
+    const posterLight = document.createElement('span');
+    posterLight.className = 'electric-featured-light';
+
+    const posterFrame = document.createElement('span');
+    posterFrame.className = 'electric-featured-frame';
+    posterFrame.style.setProperty('--poster-glow-image', `url("${String(entry.image || '').replace(/"/g, '%22')}")`);
+
+    const posterImg = document.createElement('img');
+    posterImg.className = 'electric-featured-image';
+    posterImg.src = entry.image;
+    posterImg.alt = entry.title;
+    posterImg.loading = 'lazy';
+    posterImg.decoding = 'async';
+
+    const posterCaption = document.createElement('span');
+    posterCaption.className = 'electric-featured-caption';
+    const posterTitle = document.createElement('strong');
+    posterTitle.textContent = entry.title;
+    const posterMeta = document.createElement('small');
+    posterMeta.textContent = entry.type === 'movie'
+      ? entry.meta
+      : `${entry.meta}${entry.subtitle ? ` - ${entry.subtitle}` : ''}`;
+
+    posterFrame.appendChild(posterImg);
+    posterCaption.appendChild(posterTitle);
+    posterCaption.appendChild(posterMeta);
+    posterBtn.appendChild(posterLight);
+    posterBtn.appendChild(posterFrame);
+    posterBtn.appendChild(posterCaption);
+    return posterBtn;
+  };
+
+  const updateSlide = (nextIndex, animate = true) => {
+    activeIndex = (nextIndex + entries.length) % entries.length;
+    const featured = entries[activeIndex];
+    if (animate) hero.classList.add('is-changing');
+
+    const applySlide = () => {
+      note.replaceChildren();
+      note.setAttribute('aria-label', `Open details for ${featured.title}`);
+      note.onclick = () => featured.onOpen();
+      note.onkeydown = (event) => {
+        if (event.target !== note) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        featured.onOpen();
+      };
+
+      const label = document.createElement('small');
+      label.textContent = 'Featured Screening';
+      const title = document.createElement('h3');
+      title.textContent = featured.title;
+      const meta = document.createElement('p');
+      meta.className = 'electric-featured-meta';
+      meta.textContent = featured.type === 'movie'
+        ? featured.meta
+        : `${featured.meta}${featured.subtitle ? ` - ${featured.subtitle}` : ''}`;
+      const description = document.createElement('p');
+      description.className = 'electric-featured-description';
+      description.textContent = featured.description;
+      const playBtn = document.createElement('button');
+      playBtn.className = 'settings-btn electric-featured-play';
+      playBtn.innerHTML = `
+        <span class="electric-featured-play-icon">${getPlayerIconSvg('play')}</span>
+        <span class="electric-featured-play-separator" aria-hidden="true"></span>
+        <span>Play Now</span>
+      `;
+      playBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        featured.onPlay();
+      });
+      note.append(label, title, meta, description, playBtn);
+
+      posters.replaceChildren();
+      const visibleEntries = [featured];
+      if (entries.length > 1) visibleEntries.push(entries[(activeIndex + 1) % entries.length]);
+      visibleEntries.forEach((entry, index) => posters.appendChild(createPosterButton(entry, index === 0)));
+
+      dots.replaceChildren();
+      entries.forEach((entry, index) => {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = `featured-carousel-dot${index === activeIndex ? ' active' : ''}`;
+        dot.setAttribute('aria-label', `Show ${entry.title}`);
+        dot.addEventListener('click', () => {
+          updateSlide(index);
+          scheduleRotation();
+        });
+        dots.appendChild(dot);
+      });
+      requestAnimationFrame(() => hero.classList.remove('is-changing'));
+    };
+
+    if (animate && !prefersReducedMotion()) {
+      setTimeout(applySlide, 150);
+    } else {
+      applySlide();
+    }
+  };
+
+  const clearRotation = () => {
+    if (!featuredCarouselTimer) return;
+    clearTimeout(featuredCarouselTimer);
+    featuredCarouselTimer = null;
+  };
+
+  const scheduleRotation = () => {
+    clearRotation();
+    if (!getFeaturedAutoplayEnabled() || entries.length < 2 || !hero.isConnected) return;
+    featuredCarouselTimer = setTimeout(() => {
+      updateSlide(activeIndex + 1);
+      scheduleRotation();
+    }, FEATURED_ROTATION_MS);
+  };
+
+  previousBtn.addEventListener('click', () => {
+    updateSlide(activeIndex - 1);
+    scheduleRotation();
+  });
+  nextBtn.addEventListener('click', () => {
+    updateSlide(activeIndex + 1);
+    scheduleRotation();
+  });
+  hero.addEventListener('mouseenter', clearRotation);
+  hero.addEventListener('mouseleave', scheduleRotation);
+  hero.addEventListener('focusin', clearRotation);
+  hero.addEventListener('focusout', scheduleRotation);
+
+  updateSlide(0, false);
+  scheduleRotation();
 }
 
 function scheduleLibrarySave(delayMs = 350) {
@@ -1748,6 +2569,106 @@ function updateMeasuredRuntimeForPath(filePath, durationSeconds) {
   if (changed) {
     scheduleLibrarySave();
   }
+}
+
+function updateMeasuredVideoQualityForPath(filePath, width, height) {
+  if (!filePath || (!Number.isFinite(width) && !Number.isFinite(height))) return;
+  const qualityTag = getMeasuredQualityTag({ measuredVideoWidth: width, measuredVideoHeight: height });
+  let changed = false;
+  currentLibrary = currentLibrary.map((entry) => {
+    if (entry.path !== filePath) return entry;
+    const nextTags = normalizeQualityTags([
+      ...(Array.isArray(entry.qualityTags) ? entry.qualityTags : []),
+      qualityTag,
+    ]);
+    if (
+      entry.measuredVideoWidth === width
+      && entry.measuredVideoHeight === height
+      && JSON.stringify(entry.qualityTags || []) === JSON.stringify(nextTags)
+    ) {
+      return entry;
+    }
+    changed = true;
+    return {
+      ...entry,
+      measuredVideoWidth: width,
+      measuredVideoHeight: height,
+      qualityTags: nextTags,
+    };
+  });
+  if (changed) {
+    scheduleLibrarySave();
+  }
+}
+
+async function hydrateMissingMediaMeasurements({ onProgress } = {}) {
+  if (!isCurrentUserAdmin() || !window.api?.probeMediaFile || isSharedLibraryMode()) {
+    return { scanned: 0, updated: 0, failed: 0 };
+  }
+
+  const targets = currentLibrary.filter((entry) => {
+    const width = Number(entry?.measuredVideoWidth);
+    const height = Number(entry?.measuredVideoHeight);
+    const runtime = Number(entry?.measuredRuntimeMinutes);
+    return entry?.path
+      && !/^https?:/i.test(entry.path)
+      && (!(width > 0) || !(height > 0) || !(runtime > 0));
+  });
+  if (!targets.length) return { scanned: 0, updated: 0, failed: 0 };
+
+  const probes = new Map();
+  let cursor = 0;
+  let completed = 0;
+  let failed = 0;
+  const worker = async () => {
+    while (cursor < targets.length) {
+      const target = targets[cursor];
+      cursor += 1;
+      try {
+        const result = await window.api.probeMediaFile(target.path);
+        if (result?.ok) probes.set(target.path, result);
+        else failed += 1;
+      } catch (err) {
+        failed += 1;
+      }
+      completed += 1;
+      onProgress?.(completed, targets.length);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(2, targets.length) }, () => worker()));
+  if (!probes.size) return { scanned: completed, updated: 0, failed };
+
+  let updated = 0;
+  currentLibrary = currentLibrary.map((entry) => {
+    const probe = probes.get(entry.path);
+    if (!probe) return entry;
+    const width = Number(probe.width);
+    const height = Number(probe.height);
+    const durationSeconds = Number(probe.durationSeconds);
+    const measuredVideoWidth = width > 0 ? width : entry.measuredVideoWidth;
+    const measuredVideoHeight = height > 0 ? height : entry.measuredVideoHeight;
+    const measuredRuntimeMinutes = durationSeconds > 0
+      ? Math.max(1, Math.round(durationSeconds / 60))
+      : entry.measuredRuntimeMinutes;
+    const measuredQualityTag = getMeasuredQualityTag({ measuredVideoWidth, measuredVideoHeight });
+    const qualityTags = normalizeQualityTags([
+      ...(Array.isArray(entry.qualityTags) ? entry.qualityTags : []),
+      ...inferQualityTagsFromText(`${entry.name || ''} ${entry.path || ''}`),
+      measuredQualityTag,
+    ]);
+    updated += 1;
+    return {
+      ...entry,
+      measuredVideoWidth,
+      measuredVideoHeight,
+      measuredRuntimeMinutes,
+      qualityTags,
+    };
+  });
+  await window.api.saveLibrary(currentLibrary);
+  rerenderLibraryIfVisible();
+  return { scanned: completed, updated, failed };
 }
 
 function stripLibraryWatchProgress(items) {
@@ -1912,6 +2833,15 @@ async function importFiles(files, sourceLabel, subtitleFiles = []) {
   for (const file of files) {
     if (library.some((item) => item.path === file.path)) continue;
 
+    let mediaProbe = null;
+    if (window.api?.probeMediaFile) {
+      try {
+        mediaProbe = await window.api.probeMediaFile(file.path);
+      } catch (err) {
+        console.warn('Unable to inspect media quality:', file.name, err);
+      }
+    }
+
     const isShow = isTVShow(file.name);
     const episode = isShow ? parseEpisodeInfo(file.name) : null;
     const fallbackShowName = isShow ? normalizeShowName(file.name) : null;
@@ -1979,6 +2909,16 @@ async function importFiles(files, sourceLabel, subtitleFiles = []) {
       matchedSubtitles = subtitleFiles;
     }
 
+    const probedWidth = Number(mediaProbe?.width);
+    const probedHeight = Number(mediaProbe?.height);
+    const durationSeconds = Number(mediaProbe?.durationSeconds);
+    const measuredVideoWidth = probedWidth > 0 ? probedWidth : null;
+    const measuredVideoHeight = probedHeight > 0 ? probedHeight : null;
+    const measuredQualityTag = getMeasuredQualityTag({
+      measuredVideoWidth,
+      measuredVideoHeight,
+    });
+
     library.push({
       name: displayName,
       path: file.path,
@@ -1988,6 +2928,15 @@ async function importFiles(files, sourceLabel, subtitleFiles = []) {
       showName,
       showKey,
       subtitles: mergeSubtitleLists([], matchedSubtitles),
+      qualityTags: normalizeQualityTags([
+        ...inferQualityTagsFromText(`${file.name || ''} ${file.path || ''}`),
+        measuredQualityTag,
+      ]),
+      measuredVideoWidth,
+      measuredVideoHeight,
+      measuredRuntimeMinutes: durationSeconds > 0
+        ? Math.max(1, Math.round(durationSeconds / 60))
+        : null,
     });
     newCount += 1;
   }
@@ -3363,34 +4312,55 @@ function showAccountPage() {
   const content = document.getElementById('content');
   if (!content) return;
 
+  const displayName = currentAccountUser ? getDesktopAccountDisplayName() : 'Guest Viewer';
+  const initials = displayName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'GV';
+  const joinedDate = currentAccountUser?.createdAt
+    ? new Date(currentAccountUser.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+    : 'Not enrolled';
+  const watchedMovies = currentLibrary.filter((item) => !item?.isShow && getWatchPercent(item) >= 100).length;
+  const watchedEpisodes = currentLibrary.filter((item) => item?.isShow && getWatchPercent(item) >= 100).length;
+  const inProgressCount = currentAccountUser ? getContinueWatchingEntries(currentLibrary).length : 0;
+  const favoriteMovieCount = currentLibrary.filter((item) => !item?.isShow && !!item?.isFavorite).length;
+  const favoriteShowCount = groupShows(currentLibrary).filter((group) => isShowFavorite(group)).length;
+  const favoriteCount = favoriteMovieCount + favoriteShowCount;
+
   content.innerHTML = `
-    <div class="settings-page">
+    <div class="settings-page account-lounge-page">
       <button class="back-btn" id="accountBackBtn"><- Back</button>
-      <h2>Account</h2>
+      <div class="account-page-heading">
+        <span class="account-page-kicker">Electric Lounge Membership</span>
+        <h2>Your Screening Room</h2>
+        <p>${currentAccountUser ? 'Your synchronized collection, activity, and membership details.' : 'Sign in to make this screening room yours.'}</p>
+      </div>
       <div class="settings-grid">
         <div class="settings-left">
-          <div class="account-summary-card">
-            <h3 id="accountTitle">${currentAccountUser ? getDesktopAccountDisplayName() : 'Optional account'}</h3>
-            <p id="accountDescription" class="account-summary-text">
-              ${currentAccountUser
-                ? (currentAccountUser.isAdmin
-                  ? 'Progress sync is active, and admin tools are unlocked for this account.'
-                  : 'Progress sync is active for this account.')
-                : 'Sign in or create an account to sync your continue-watching progress with the websites.'}
-            </p>
-            <p id="accountEmail" class="account-summary-text${currentAccountUser ? '' : ' hidden'}">
-              ${currentAccountUser?.email || ''}
-            </p>
+          <div class="account-summary-card membership-card">
+            <span class="membership-card-label">${currentAccountUser ? 'Member Pass' : 'Guest Pass'}</span>
+            <div class="membership-card-main">
+              <span class="membership-avatar">${escapeHtml(initials)}</span>
+              <div class="membership-identity">
+                <h3 id="accountTitle">${escapeHtml(displayName)}</h3>
+                <p id="accountEmail" class="account-summary-text${currentAccountUser ? '' : ' hidden'}">${escapeHtml(currentAccountUser?.email || '')}</p>
+                <span class="membership-role">${currentAccountUser ? (currentAccountUser.isAdmin ? 'Lounge Director' : 'Lounge Member') : 'Guest Admission'}</span>
+              </div>
+            </div>
+            <div class="membership-card-footer">
+              <span><small>Member Since</small>${joinedDate}</span>
+              <span><small>Sync Status</small>${currentAccountUser ? 'Active' : 'Unavailable'}</span>
+            </div>
             <div class="account-action-row" id="accountActionRow"></div>
           </div>
         </div>
 
         <div class="settings-right">
-          <div class="analytics-card">
-            <h3 class="analytics-title">Sync</h3>
-            <div class="analytics-item"><span>Status</span><span>${currentAccountUser ? 'Signed In' : 'Guest'}</span></div>
-            <div class="analytics-item"><span>Role</span><span>${currentAccountUser ? (currentAccountUser.isAdmin ? 'Admin' : 'Viewer') : 'Guest'}</span></div>
-            <div class="analytics-item"><span>Progress</span><span>${currentAccountUser ? 'Synced' : 'Local Only'}</span></div>
+          <div class="analytics-card account-viewing-card">
+            <h3 class="analytics-title">Your Viewing</h3>
+            <div class="account-stat-grid">
+              <span><strong>${watchedMovies}</strong><small>Movies Finished</small></span>
+              <span><strong>${watchedEpisodes}</strong><small>Episodes Finished</small></span>
+              <span><strong>${inProgressCount}</strong><small>In Progress</small></span>
+              <span><strong>${favoriteCount}</strong><small>Favorites</small></span>
+            </div>
           </div>
         </div>
       </div>
@@ -3454,7 +4424,7 @@ function showAccountPage() {
 
   const favoritesTitle = document.createElement('h3');
   favoritesTitle.className = 'analytics-title';
-  favoritesTitle.textContent = 'Favorites';
+  favoritesTitle.textContent = 'Your Framed Collection';
   favoritesWrap.appendChild(favoritesTitle);
 
   if (!favoriteItems.length) {
@@ -3470,7 +4440,7 @@ function showAccountPage() {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'account-favorite-card';
-      card.addEventListener('click', () => showDetails(item));
+      card.addEventListener('click', () => openWithCinemaTransition(() => showDetails(item)));
 
       const img = document.createElement('img');
       img.className = 'account-favorite-poster';
@@ -3490,7 +4460,7 @@ function showAccountPage() {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'account-favorite-card';
-      card.addEventListener('click', () => showShowDetails(group));
+      card.addEventListener('click', () => openWithCinemaTransition(() => showShowDetails(group)));
 
       const img = document.createElement('img');
       img.className = 'account-favorite-poster';
@@ -3737,14 +4707,49 @@ function setTheme(theme) {
   localStorage.setItem('theme', theme);
 }
 
+function getAppTheme() {
+  const saved = localStorage.getItem(APP_THEME_KEY) || APP_THEME_DEFAULT;
+  return APP_THEME_OPTIONS.some((option) => option.id === saved) ? saved : APP_THEME_DEFAULT;
+}
+
+function setAppTheme(themeId) {
+  const next = APP_THEME_OPTIONS.some((option) => option.id === themeId) ? themeId : APP_THEME_DEFAULT;
+  document.body.dataset.appTheme = next;
+  localStorage.setItem(APP_THEME_KEY, next);
+}
+
 function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   setTheme(saved);
+  setAppTheme(getAppTheme());
+}
+
+function renderAppThemeOption(option, activeThemeId) {
+  const isActive = option.id === activeThemeId;
+  const previewMarkup = option.preview
+    ? `<div class="app-theme-preview" style="background-image:url('${option.preview.replace(/'/g, "%27")}')"></div>`
+    : `<div class="app-theme-preview app-theme-preview-default"><span>MyFlix</span></div>`;
+
+  return `
+    <button
+      type="button"
+      class="app-theme-option${isActive ? ' active' : ''}"
+      data-app-theme-option="${option.id}"
+      aria-pressed="${isActive ? 'true' : 'false'}"
+    >
+      ${previewMarkup}
+      <span class="app-theme-copy">
+        <strong>${option.label}</strong>
+        <small>${option.description}</small>
+      </span>
+    </button>
+  `;
 }
 
 function showSettings() {
   const content = document.getElementById('content');
   if (!content) return;
+  const activeAppTheme = getAppTheme();
   const adminToolsMarkup = isCurrentUserAdmin()
     ? `
           <div class="settings-section">
@@ -3810,7 +4815,7 @@ function showSettings() {
                   <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/>
                 </svg>
               </span>
-              <span>Delete Library</span>
+              <span>Manage Library</span>
             </button>
           </div>
     `
@@ -3823,7 +4828,7 @@ function showSettings() {
     `;
 
   content.innerHTML = `
-    <div class="settings-page">
+    <div class="settings-page settings-lounge-page">
       <button class="back-btn" id="settingsBackBtn"><- Back</button>
       <h2>Settings</h2>
 
@@ -3840,6 +4845,37 @@ function showSettings() {
                 </label>
                 <span class="theme-label" id="darkLabel">Dark</span>
               </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-theme-panel">
+              <div class="settings-theme-header">
+                <span>App Theme</span>
+                <small>Choose a visual design without changing app behavior.</small>
+              </div>
+              <div class="app-theme-grid">
+                ${APP_THEME_OPTIONS.map((option) => renderAppThemeOption(option, activeAppTheme)).join('')}
+              </div>
+            </div>
+          </div>
+          <div class="settings-section cinema-control-panel">
+            <div class="settings-theme-header">
+              <span>Cinema Experience</span>
+              <small>Control optional lounge effects. Sounds remain off until you enable them.</small>
+            </div>
+            <div class="settings-row">
+              <span>Interface and curtain sounds</span>
+              <label class="toggle">
+                <input type="checkbox" id="cinemaSoundToggle" ${getCinemaSoundsEnabled() ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <span>Auto-rotate Now Showing</span>
+              <label class="toggle">
+                <input type="checkbox" id="featuredAutoplayToggle" ${getFeaturedAutoplayEnabled() ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
           ${adminToolsMarkup}
@@ -3886,6 +4922,32 @@ function showSettings() {
       lightLabel.classList.toggle('active', !themeToggle.checked);
     });
   }
+
+  const syncAppThemeSelection = () => {
+    const current = getAppTheme();
+    document.querySelectorAll('[data-app-theme-option]').forEach((node) => {
+      const isActive = node.getAttribute('data-app-theme-option') === current;
+      node.classList.toggle('active', isActive);
+      node.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  };
+
+  document.querySelectorAll('[data-app-theme-option]').forEach((node) => {
+    node.addEventListener('click', () => {
+      const nextTheme = node.getAttribute('data-app-theme-option') || APP_THEME_DEFAULT;
+      setAppTheme(nextTheme);
+      syncAppThemeSelection();
+    });
+  });
+  syncAppThemeSelection();
+
+  document.getElementById('cinemaSoundToggle')?.addEventListener('change', (event) => {
+    setCinemaSoundsEnabled(!!event.target.checked);
+    if (event.target.checked) playCinemaSound('click');
+  });
+  document.getElementById('featuredAutoplayToggle')?.addEventListener('change', (event) => {
+    setFeaturedAutoplayEnabled(!!event.target.checked);
+  });
 
   const setStatus = () => {};
 
@@ -3935,90 +4997,347 @@ function showSettings() {
   renderLogPanel();
 }
 
-function showClearOptions() {
+function showClearOptions(options = {}) {
   if (!ensureAdminAccess()) return;
   const content = document.getElementById('content');
   if (!content) return;
 
+  if (options.mode) libraryManagerState.mode = options.mode;
+  if (Object.prototype.hasOwnProperty.call(options, 'showKey')) libraryManagerState.showKey = options.showKey;
+  if (Object.prototype.hasOwnProperty.call(options, 'season')) libraryManagerState.season = options.season;
+  libraryManagerState.selected.clear();
+
   content.innerHTML = `
-    <div class="settings-page">
-      <button class="back-btn" id="clearBackBtn"><- Back</button>
-      <h2>Delete Library</h2>
-      <div class="settings-section">
-        <button id="deleteMovieBtn" class="settings-btn secondary">Delete One Movie</button>
-        <button id="deleteShowBtn" class="settings-btn secondary">Delete One Show</button>
-        <button id="deleteSeasonBtn" class="settings-btn secondary">Delete One Season</button>
-        <button id="deleteEpisodeBtn" class="settings-btn secondary">Delete One Episode</button>
-        <button id="deleteAllBtn" class="settings-btn settings-danger">Delete Entire Library</button>
+    <div class="settings-page library-manager-page">
+      <button class="back-btn" id="libraryManagerBackBtn"><- Settings</button>
+      <div class="library-manager-heading">
+        <span class="account-page-kicker">Admin Collection Desk</span>
+        <h2>Library Management</h2>
+        <p>Search, review, and remove media without losing your place.</p>
       </div>
-      <div id="clearList" class="settings-list"></div>
+      <div class="library-manager-toolbar">
+        <div class="library-manager-tabs" role="tablist">
+          <button data-manager-mode="overview">Overview</button>
+          <button data-manager-mode="movies">Movies</button>
+          <button data-manager-mode="shows">Shows</button>
+          <button data-manager-mode="seasons">Seasons</button>
+          <button data-manager-mode="episodes">Episodes</button>
+        </div>
+        <input id="libraryManagerSearch" class="prompt-input library-manager-search" value="${String(libraryManagerState.query || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" placeholder="Search this collection...">
+      </div>
+      <div id="libraryManagerBreadcrumbs" class="library-manager-breadcrumbs"></div>
+      <div id="libraryManagerBatch" class="library-manager-batch hidden">
+        <span id="libraryManagerSelectedCount">0 selected</span>
+        <button id="libraryManagerDeleteSelected" class="settings-btn settings-danger">Delete Selected</button>
+      </div>
+      <div id="libraryManagerList" class="library-manager-list"></div>
+      <div class="library-manager-danger-zone">
+        <div><strong>Entire library</strong><span>Use only when you intend to remove every imported entry.</span></div>
+        <button id="libraryManagerDeleteAll" class="settings-btn settings-danger">Delete Everything</button>
+      </div>
     </div>
   `;
 
   setSideActive('settings');
+  const list = document.getElementById('libraryManagerList');
+  const breadcrumbs = document.getElementById('libraryManagerBreadcrumbs');
+  const batchBar = document.getElementById('libraryManagerBatch');
+  const selectedCount = document.getElementById('libraryManagerSelectedCount');
+  const searchInputNode = document.getElementById('libraryManagerSearch');
 
-  document.getElementById('clearBackBtn')?.addEventListener('click', showSettings);
+  const matchesManagerQuery = (label) => !libraryManagerState.query
+    || String(label || '').toLowerCase().includes(libraryManagerState.query.toLowerCase());
 
-  document.getElementById('deleteAllBtn')?.addEventListener('click', async () => {
-    if (!confirm('Delete the entire library?')) return;
+  const getModeEntries = () => {
+    if (libraryManagerState.mode === 'movies') {
+      return currentLibrary.filter((item) => !item.isShow).map((item) => ({
+        key: item.path,
+        label: item.data?.title || item.name,
+        meta: getFeaturedMovieMeta(item),
+        poster: getMoviePosterSrc(item, 154),
+        value: item,
+      }));
+    }
+    if (libraryManagerState.mode === 'shows') {
+      return groupShows(currentLibrary).map((group) => ({
+        key: group.key,
+        label: group.data?.name || group.name,
+        meta: `${group.episodes.length} episode${group.episodes.length === 1 ? '' : 's'}`,
+        poster: getShowPosterSrc(group, 154),
+        value: group,
+      }));
+    }
+    if (libraryManagerState.mode === 'seasons') {
+      return groupSeasons(currentLibrary).map((seasonEntry) => ({
+        key: `${seasonEntry.key}::${seasonEntry.season}`,
+        label: seasonEntry.label,
+        meta: `Season ${seasonEntry.season}`,
+        poster: '',
+        value: seasonEntry,
+      }));
+    }
+    if (libraryManagerState.mode === 'episodes' && libraryManagerState.showKey && Number.isFinite(libraryManagerState.season)) {
+      const group = groupShows(currentLibrary).find((entry) => entry.key === libraryManagerState.showKey);
+      return (group?.episodes || [])
+        .filter((episode) => episode?.episode?.season === libraryManagerState.season)
+        .map((episode) => ({
+          key: episode.path,
+          label: formatEpisodeLabel(episode),
+          meta: getRuntimeForItem(episode) ? `${getRuntimeForItem(episode)} min` : 'Episode',
+          poster: buildTmdbStillUrl(episode.tmdbStillPath, 300),
+          value: episode,
+        }));
+    }
+    return [];
+  };
+
+  const updateBatchBar = () => {
+    const count = libraryManagerState.selected.size;
+    batchBar?.classList.toggle('hidden', count === 0);
+    if (selectedCount) selectedCount.textContent = `${count} selected`;
+  };
+
+  const removeEntries = async (entries) => {
+    if (!entries.length) return;
+    const mode = libraryManagerState.mode;
+    const keys = new Set(entries.map((entry) => entry.key));
+
+    if (mode === 'movies' || (mode === 'episodes' && libraryManagerState.showKey)) {
+      currentLibrary = currentLibrary.filter((item) => !keys.has(item.path));
+    } else if (mode === 'shows') {
+      currentLibrary = currentLibrary.filter((item) => !item.isShow || !keys.has(getShowKeyForFile(item)));
+    } else if (mode === 'seasons') {
+      currentLibrary = currentLibrary.filter((item) => {
+        if (!item.isShow) return true;
+        return !keys.has(`${getShowKeyForFile(item)}::${item.episode?.season}`);
+      });
+    }
+
+    await window.api.saveLibrary(currentLibrary);
+    libraryManagerState.selected.clear();
+    addLog(`Deleted ${entries.length} ${mode === 'episodes' ? 'episode' : mode.slice(0, -1)} item${entries.length === 1 ? '' : 's'}.`);
+
+    if (mode === 'episodes' && libraryManagerState.showKey) {
+      const group = groupShows(currentLibrary).find((entry) => entry.key === libraryManagerState.showKey);
+      if (!group) {
+        libraryManagerState.showKey = null;
+        libraryManagerState.season = null;
+      } else if (!group.episodes.some((episode) => episode?.episode?.season === libraryManagerState.season)) {
+        libraryManagerState.season = null;
+      }
+    }
+    renderManagerView();
+  };
+
+  const renderRows = (entries) => {
+    list.replaceChildren();
+    const filtered = entries.filter((entry) => matchesManagerQuery(`${entry.label} ${entry.meta}`));
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'library-manager-empty';
+      empty.appendChild(createCinemaLoader('No matching media found.'));
+      list.appendChild(empty);
+      return;
+    }
+
+    for (const entry of filtered) {
+      const row = document.createElement('article');
+      row.className = 'library-manager-row';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'library-manager-checkbox';
+      checkbox.checked = libraryManagerState.selected.has(entry.key);
+      checkbox.setAttribute('aria-label', `Select ${entry.label}`);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) libraryManagerState.selected.add(entry.key);
+        else libraryManagerState.selected.delete(entry.key);
+        updateBatchBar();
+      });
+
+      if (entry.poster) {
+        const poster = document.createElement('img');
+        poster.className = 'library-manager-poster';
+        poster.src = entry.poster;
+        poster.alt = '';
+        poster.loading = 'lazy';
+        row.appendChild(poster);
+      } else {
+        const seasonBadge = document.createElement('span');
+        seasonBadge.className = 'library-manager-season-badge';
+        seasonBadge.textContent = `S${String(entry.value?.season || '').padStart(2, '0')}`;
+        row.appendChild(seasonBadge);
+      }
+
+      const copy = document.createElement('div');
+      copy.className = 'library-manager-copy';
+      const title = document.createElement('strong');
+      title.textContent = entry.label;
+      const meta = document.createElement('span');
+      meta.textContent = entry.meta || '';
+      copy.append(title, meta);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'settings-btn settings-danger';
+      removeBtn.textContent = 'Delete';
+      removeBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete "${entry.label}"?`)) return;
+        await removeEntries([entry]);
+      });
+
+      row.prepend(checkbox);
+      row.append(copy, removeBtn);
+      list.appendChild(row);
+    }
+  };
+
+  const renderEpisodeNavigation = () => {
+    breadcrumbs.replaceChildren();
+    const rootCrumb = document.createElement('button');
+    rootCrumb.textContent = 'Shows';
+    rootCrumb.addEventListener('click', () => {
+      libraryManagerState.showKey = null;
+      libraryManagerState.season = null;
+      libraryManagerState.selected.clear();
+      renderManagerView();
+    });
+    breadcrumbs.appendChild(rootCrumb);
+
+    const groups = groupShows(currentLibrary);
+    const selectedGroup = groups.find((group) => group.key === libraryManagerState.showKey) || null;
+    if (!selectedGroup) {
+      list.replaceChildren();
+      groups.filter((group) => matchesManagerQuery(group.data?.name || group.name)).forEach((group) => {
+        const buttonNode = document.createElement('button');
+        buttonNode.className = 'library-manager-navigation-card';
+        const label = document.createElement('strong');
+        label.textContent = group.data?.name || group.name;
+        const count = document.createElement('span');
+        count.textContent = `${group.episodes.length} episodes`;
+        const open = document.createElement('b');
+        open.textContent = 'Open >';
+        buttonNode.append(label, count, open);
+        buttonNode.addEventListener('click', () => {
+          libraryManagerState.showKey = group.key;
+          libraryManagerState.season = null;
+          libraryManagerState.selected.clear();
+          renderManagerView();
+        });
+        list.appendChild(buttonNode);
+      });
+      return;
+    }
+
+    const showCrumb = document.createElement('button');
+    showCrumb.textContent = selectedGroup.data?.name || selectedGroup.name;
+    showCrumb.addEventListener('click', () => {
+      libraryManagerState.season = null;
+      libraryManagerState.selected.clear();
+      renderManagerView();
+    });
+    breadcrumbs.appendChild(showCrumb);
+
+    if (!Number.isFinite(libraryManagerState.season)) {
+      list.replaceChildren();
+      getSeasonEntriesForGroup(selectedGroup).forEach((seasonEntry) => {
+        const buttonNode = document.createElement('button');
+        buttonNode.className = 'library-manager-navigation-card';
+        const label = document.createElement('strong');
+        label.textContent = `Season ${seasonEntry.season}`;
+        const count = document.createElement('span');
+        count.textContent = `${seasonEntry.episodes.length} episodes`;
+        const open = document.createElement('b');
+        open.textContent = 'Open >';
+        buttonNode.append(label, count, open);
+        buttonNode.addEventListener('click', () => {
+          libraryManagerState.season = seasonEntry.season;
+          libraryManagerState.selected.clear();
+          renderManagerView();
+        });
+        list.appendChild(buttonNode);
+      });
+      return;
+    }
+
+    const seasonCrumb = document.createElement('button');
+    seasonCrumb.textContent = `Season ${libraryManagerState.season}`;
+    breadcrumbs.appendChild(seasonCrumb);
+    renderRows(getModeEntries());
+  };
+
+  const renderOverview = () => {
+    const groups = groupShows(currentLibrary);
+    const seasons = groupSeasons(currentLibrary);
+    const cards = [
+      ['movies', 'Movies', currentLibrary.filter((item) => !item.isShow).length],
+      ['shows', 'Shows', groups.length],
+      ['seasons', 'Seasons', seasons.length],
+      ['episodes', 'Episodes', currentLibrary.filter((item) => item.isShow).length],
+    ];
+    list.replaceChildren();
+    const grid = document.createElement('div');
+    grid.className = 'library-manager-overview';
+    cards.forEach(([mode, label, count]) => {
+      const card = document.createElement('button');
+      card.className = 'library-manager-overview-card';
+      card.innerHTML = `<span>${label}</span><strong>${count}</strong><small>Manage collection</small>`;
+      card.addEventListener('click', () => {
+        libraryManagerState.mode = mode;
+        libraryManagerState.showKey = null;
+        libraryManagerState.season = null;
+        renderManagerView();
+      });
+      grid.appendChild(card);
+    });
+    list.appendChild(grid);
+  };
+
+  function renderManagerView() {
+    document.querySelectorAll('[data-manager-mode]').forEach((buttonNode) => {
+      buttonNode.classList.toggle('active', buttonNode.getAttribute('data-manager-mode') === libraryManagerState.mode);
+    });
+    breadcrumbs.replaceChildren();
+    libraryManagerState.selected.clear();
+    updateBatchBar();
+    if (libraryManagerState.mode === 'overview') {
+      renderOverview();
+      return;
+    }
+    if (libraryManagerState.mode === 'episodes') {
+      renderEpisodeNavigation();
+      return;
+    }
+    renderRows(getModeEntries());
+  }
+
+  document.getElementById('libraryManagerBackBtn')?.addEventListener('click', showSettings);
+  document.querySelectorAll('[data-manager-mode]').forEach((buttonNode) => {
+    buttonNode.addEventListener('click', () => {
+      libraryManagerState.mode = buttonNode.getAttribute('data-manager-mode') || 'overview';
+      libraryManagerState.showKey = null;
+      libraryManagerState.season = null;
+      renderManagerView();
+    });
+  });
+  searchInputNode?.addEventListener('input', () => {
+    libraryManagerState.query = searchInputNode.value.trim();
+    renderManagerView();
+  });
+  document.getElementById('libraryManagerDeleteSelected')?.addEventListener('click', async () => {
+    const entries = getModeEntries().filter((entry) => libraryManagerState.selected.has(entry.key));
+    if (!entries.length || !confirm(`Delete ${entries.length} selected item(s)?`)) return;
+    await removeEntries(entries);
+  });
+  document.getElementById('libraryManagerDeleteAll')?.addEventListener('click', async () => {
+    if (!confirm('Delete the entire library? This cannot be undone.')) return;
     currentLibrary = [];
     await window.api.saveLibrary(currentLibrary);
+    libraryManagerState.showKey = null;
+    libraryManagerState.season = null;
     addLog('Deleted entire library.');
-    showClearOptions();
+    renderManagerView();
   });
 
-  document.getElementById('deleteMovieBtn')?.addEventListener('click', () => {
-    const movies = currentLibrary.filter((item) => !item.isShow);
-    renderDeleteList(
-      movies,
-      (item) => item.data?.title || item.name,
-      async (item) => {
-        currentLibrary = currentLibrary.filter((entry) => entry.path !== item.path);
-        await window.api.saveLibrary(currentLibrary);
-        addLog(`Deleted movie: ${item.data?.title || item.name}`);
-        showClearOptions();
-      }
-    );
-  });
-
-  document.getElementById('deleteShowBtn')?.addEventListener('click', () => {
-    const groups = groupShows(currentLibrary);
-    renderDeleteList(
-      groups,
-      (group) => group.data?.name || group.name,
-      async (group) => {
-        currentLibrary = currentLibrary.filter((entry) => {
-          if (!entry.isShow) return true;
-          return getShowKeyForFile(entry) !== group.key;
-        });
-        await window.api.saveLibrary(currentLibrary);
-        addLog(`Deleted show: ${group.data?.name || group.name}`);
-        showClearOptions();
-      }
-    );
-  });
-
-  document.getElementById('deleteSeasonBtn')?.addEventListener('click', () => {
-    const seasonGroups = groupSeasons(currentLibrary);
-    renderDeleteList(
-      seasonGroups,
-      (season) => season.label,
-      async (season) => {
-        currentLibrary = currentLibrary.filter((entry) => {
-          if (!entry.isShow) return true;
-          const key = getShowKeyForFile(entry);
-          return !(key === season.key && entry.episode?.season === season.season);
-        });
-        await window.api.saveLibrary(currentLibrary);
-        addLog(`Deleted season: ${season.label}`);
-        showClearOptions();
-      }
-    );
-  });
-
-  document.getElementById('deleteEpisodeBtn')?.addEventListener('click', () => {
-    showDeleteEpisodeHierarchy();
-  });
+  renderManagerView();
 }
 
 function applyRelinkEntries(relinks) {
@@ -4050,6 +5369,7 @@ async function showLibraryQualityTools() {
       <h2>Library Quality</h2>
       <div class="settings-section">
         <button id="scanMissingBtn" class="settings-btn secondary">Scan Missing Files</button>
+        <button id="scanMediaDetailsBtn" class="settings-btn secondary">Scan Quality &amp; Runtime</button>
         <button id="autoRelinkBtn" class="settings-btn secondary">Auto Relink From Folder</button>
       </div>
       <div id="qualityStatus" class="settings-status"></div>
@@ -4141,6 +5461,18 @@ async function showLibraryQualityTools() {
 
   document.getElementById('qualityBackBtn')?.addEventListener('click', showSettings);
   document.getElementById('scanMissingBtn')?.addEventListener('click', runScan);
+  document.getElementById('scanMediaDetailsBtn')?.addEventListener('click', async () => {
+    setStatus('Preparing media scan...');
+    const result = await hydrateMissingMediaMeasurements({
+      onProgress: (completed, total) => setStatus(`Inspecting media ${completed} of ${total}...`),
+    });
+    if (!result.scanned) {
+      setStatus('All quality and runtime details are already available.');
+      return;
+    }
+    setStatus(`Updated ${result.updated} item(s).${result.failed ? ` ${result.failed} file(s) could not be inspected.` : ''}`);
+    if (result.updated) addLog(`Scanned quality and runtime for ${result.updated} media item(s).`);
+  });
   document.getElementById('autoRelinkBtn')?.addEventListener('click', async () => {
     if (!window.api?.autoRelinkLibrary) {
       setStatus('Auto relink is unavailable.', true);
@@ -4454,6 +5786,7 @@ function getContinueWatchingEntries(library, showGroupsOverride = null) {
     entries.push({
       type: 'show',
       group,
+      episode: continueState.episode,
       percent: continueState.percent,
       updatedAt: continueState.updatedAt,
       subtitle: continueState.subtitle,
@@ -4501,6 +5834,55 @@ function renderContinueWatching(library, query = '', showGroups = null) {
   continueSection.appendChild(frag);
 }
 
+function createLibraryPosterCard({ file = null, group = null }) {
+  const isShow = !!group;
+  const posterSrc = isShow ? getShowPosterSrc(group, 342) : getMoviePosterSrc(file, 342);
+  const titleText = isShow
+    ? (group.data?.name || group.name)
+    : (file.data?.title || file.name);
+  const div = document.createElement('article');
+  div.classList.add('movie', 'library-poster-card');
+  div.setAttribute('tabindex', '0');
+  div.setAttribute('role', 'button');
+  div.setAttribute('aria-label', `Open ${titleText}`);
+
+  const img = document.createElement('img');
+  img.src = posterSrc;
+  img.alt = titleText;
+  img.loading = 'lazy';
+  img.decoding = 'async';
+
+  const title = document.createElement('p');
+  title.textContent = titleText;
+
+  const posterWrap = document.createElement('div');
+  posterWrap.classList.add('card-poster-wrap');
+  posterWrap.style.setProperty('--poster-glow-image', `url("${String(posterSrc || '').replace(/"/g, '%22')}")`);
+  posterWrap.appendChild(img);
+  if (isShow ? hasSubtitlesOnShow(group) : hasSubtitlesOnItem(file)) {
+    appendCcBadge(posterWrap);
+  }
+
+  div.appendChild(posterWrap);
+  const progress = isShow ? getShowWatchPercent(group) : getWatchPercent(file);
+  const qualityTags = isShow ? getQualityTagsForGroup(group) : getQualityTagsForItem(file);
+  const status = createMediaCardStatusRow(qualityTags, progress);
+  if (status) div.appendChild(status);
+  div.appendChild(title);
+
+  const openDetails = () => openWithCinemaTransition(() => {
+    if (isShow) return showShowDetails(group);
+    return showDetails(file);
+  });
+  div.addEventListener('click', openDetails);
+  div.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openDetails();
+  });
+  return div;
+}
+
 // render the library
 function renderLibrary(libraryOverride, viewOverride) {
   if (!window.api || !window.api.getLibrary) {
@@ -4523,7 +5905,12 @@ function renderLibrary(libraryOverride, viewOverride) {
   refreshGenreFilterOptions(library, showGroupsBase);
 
   if (view === 'all') {
+    renderFeaturedHero(library, showGroupsBase);
     renderContinueWatching(library, query, showGroupsBase);
+  } else if (featuredSection) {
+    featuredSection.replaceChildren();
+    featuredSection.style.display = 'none';
+    if (featuredHeading) featuredHeading.style.display = 'none';
   }
 
   let movieItems = library.filter((file) => !file.isShow);
@@ -4537,36 +5924,13 @@ function renderLibrary(libraryOverride, viewOverride) {
     movieItems = movieItems.filter((file) => getGenresFromItem(file).includes(genreQuery));
   }
   movieItems = applySortToMovies(movieItems);
+  const allMovieItems = movieItems;
+  const renderedMovieItems = view === 'all' ? movieItems.slice(0, HOME_RAIL_LIMIT) : movieItems;
+  const movieSeeAllBtn = document.getElementById('seeAllMoviesBtn');
+  if (movieSeeAllBtn) movieSeeAllBtn.textContent = `See All Movies (${allMovieItems.length})`;
   const moviesFrag = document.createDocumentFragment();
-  for (const file of movieItems) {
-
-    const div = document.createElement('div');
-    div.classList.add('movie');
-
-    const img = document.createElement('img');
-    img.src = getMoviePosterSrc(file, 200);
-    img.loading = 'lazy';
-    img.decoding = 'async';
-
-    const title = document.createElement('p');
-    title.textContent = file.data?.title || file.name;
-
-    const posterWrap = document.createElement('div');
-    posterWrap.classList.add('card-poster-wrap');
-    posterWrap.appendChild(img);
-    if (hasSubtitlesOnItem(file)) {
-      appendCcBadge(posterWrap);
-    }
-
-    div.appendChild(posterWrap);
-    const movieProgress = getWatchPercent(file);
-    if (movieProgress > 0) {
-      div.appendChild(createCardProgressBar(movieProgress));
-    }
-    div.appendChild(title);
-    div.addEventListener('click', () => showDetails(file));
-
-    moviesFrag.appendChild(div);
+  for (const file of renderedMovieItems) {
+    moviesFrag.appendChild(createLibraryPosterCard({ file }));
   }
   moviesSection.appendChild(moviesFrag);
 
@@ -4584,48 +5948,32 @@ function renderLibrary(libraryOverride, viewOverride) {
     showGroups = showGroups.filter((group) => getGenresFromGroup(group).includes(genreQuery));
   }
   showGroups = applySortToShows(showGroups);
+  const allShowGroups = showGroups;
+  const renderedShowGroups = view === 'all' ? showGroups.slice(0, HOME_RAIL_LIMIT) : showGroups;
+  const showSeeAllBtn = document.getElementById('seeAllShowsBtn');
+  if (showSeeAllBtn) showSeeAllBtn.textContent = `See All Shows (${allShowGroups.length})`;
   const showsFrag = document.createDocumentFragment();
-  for (const group of showGroups) {
-
-    const div = document.createElement('div');
-    div.classList.add('movie');
-
-    const img = document.createElement('img');
-    img.src = getShowPosterSrc(group, 200);
-    img.loading = 'lazy';
-    img.decoding = 'async';
-
-    const title = document.createElement('p');
-    title.textContent = group.data?.name || group.name;
-
-    const posterWrap = document.createElement('div');
-    posterWrap.classList.add('card-poster-wrap');
-    posterWrap.appendChild(img);
-    if (hasSubtitlesOnShow(group)) {
-      appendCcBadge(posterWrap);
-    }
-
-    div.appendChild(posterWrap);
-    const showProgress = getShowWatchPercent(group);
-    if (showProgress > 0) {
-      div.appendChild(createCardProgressBar(showProgress));
-    }
-    div.appendChild(title);
-    div.addEventListener('click', () => showShowDetails(group));
-
-    showsFrag.appendChild(div);
+  for (const group of renderedShowGroups) {
+    showsFrag.appendChild(createLibraryPosterCard({ group }));
   }
   showsSection.appendChild(showsFrag);
 
   logRenderPerf(performance.now() - startTime, {
-    movies: movieItems.length,
-    shows: showGroups.length,
+    movies: allMovieItems.length,
+    shows: allShowGroups.length,
     continueCount: view === 'all' && continueSection ? continueSection.children.length : 0,
     query,
   });
 }
 
 async function showEpisodePlayer(file, onBack, options = {}) {
+  if (getAppTheme() === 'electric-lounge' && !options.skipCinemaTransition && !prefersReducedMotion()) {
+    return runCinemaTransition(
+      () => showEpisodePlayer(file, onBack, { ...options, skipCinemaTransition: true }),
+      'playback'
+    );
+  }
+
   if (activePlayerKeyHandler) {
     window.removeEventListener('keydown', activePlayerKeyHandler);
     activePlayerKeyHandler = null;
@@ -5037,7 +6385,7 @@ async function showEpisodePlayer(file, onBack, options = {}) {
       updateWatchProgressForPath(file.path, video.duration, video.duration, true);
     }
     cleanupPlayerHandlers();
-    showEpisodePlayer(nextEpisode, onBack, { episodes: playbackSequence });
+    showEpisodePlayer(nextEpisode, onBack, { episodes: playbackSequence, skipCinemaTransition: true });
   });
   cueActions.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -5049,6 +6397,7 @@ async function showEpisodePlayer(file, onBack, options = {}) {
   video.addEventListener('loadedmetadata', syncPlayerControls);
   video.addEventListener('loadedmetadata', () => {
     updateMeasuredRuntimeForPath(file.path, video.duration);
+    updateMeasuredVideoQualityForPath(file.path, video.videoWidth, video.videoHeight);
   });
   video.addEventListener('play', () => {
     syncPlayerControls();
@@ -5244,7 +6593,7 @@ async function showEpisodePlayer(file, onBack, options = {}) {
           updateWatchProgressForPath(file.path, video.currentTime, video.duration, false);
         }
         cleanupPlayerHandlers();
-        showEpisodePlayer(next, onBack, { episodes });
+        showEpisodePlayer(next, onBack, { episodes, skipCinemaTransition: true });
       }
     });
 
@@ -5296,9 +6645,15 @@ async function showShowDetails(group) {
 
   const header = document.createElement('div');
   header.classList.add('details-header');
+  if (getAppTheme() === 'electric-lounge') {
+    header.classList.add('electric-private-room');
+    const backdrop = buildTmdbBackdropUrl(group.data?.backdrop_path, 1280) || getShowPosterSrc(group, 500);
+    header.style.setProperty('--details-backdrop-image', `url("${String(backdrop || '').replace(/"/g, '%22')}")`);
+  }
 
   const poster = document.createElement('img');
   poster.src = getShowPosterSrc(group);
+  poster.alt = group.data?.name || group.name || 'TV show poster';
   poster.classList.add('details-poster');
   header.appendChild(poster);
 
@@ -5332,7 +6687,7 @@ async function showShowDetails(group) {
   metaGrid.classList.add('details-meta-grid');
 
   const directorGroup = createPeopleGroup('Director');
-  fillPeopleChips(directorGroup.chips, []);
+  fillPeopleLoading(directorGroup.chips);
 
   const genres = document.createElement('p');
   const showGenres = getGenresFromGroup(group).join(', ');
@@ -5343,7 +6698,7 @@ async function showShowDetails(group) {
   seasonsLine.textContent = seasonCount ? `Seasons: ${seasonCount}` : 'Seasons: Unknown';
 
   const castGroup = createPeopleGroup('Cast');
-  fillPeopleChips(castGroup.chips, []);
+  fillPeopleLoading(castGroup.chips);
 
   const primaryCard = document.createElement('div');
   primaryCard.classList.add('details-card');
@@ -5360,12 +6715,24 @@ async function showShowDetails(group) {
   metaGrid.appendChild(castCard);
 
   info.appendChild(titleRow);
+  info.appendChild(createDetailsBadges(getQualityTagsForGroup(group), hasSubtitlesOnShow(group)));
   info.appendChild(overview);
   info.appendChild(separator);
   info.appendChild(metaGrid);
 
   const detailsActions = document.createElement('div');
   detailsActions.classList.add('details-actions');
+  const showContinueState = getShowContinueState(group);
+  const firstPlayableEpisode = showContinueState?.episode || group.episodes?.[0] || null;
+  if (firstPlayableEpisode) {
+    const playNextBtn = document.createElement('button');
+    playNextBtn.classList.add('details-play-primary');
+    playNextBtn.innerHTML = `${getPlayerIconSvg('play')}<span>${showContinueState ? 'Play Next' : 'Start Series'}</span>`;
+    playNextBtn.addEventListener('click', () => {
+      showEpisodePlayer(firstPlayableEpisode, () => showShowDetails(group), { episodes: group.episodes });
+    });
+    detailsActions.appendChild(playNextBtn);
+  }
   if (currentAccountUser) {
     detailsActions.appendChild(createFavoriteButton(isShowFavorite(group), async () => {
       const nextFavorite = !isShowFavorite(group);
@@ -5521,8 +6888,8 @@ async function showShowDetails(group) {
       left.appendChild(label);
 
       const overview = document.createElement('p');
-      overview.classList.add('episode-overview');
-      overview.textContent = 'Episode details loading...';
+      overview.classList.add('episode-overview', 'cinema-inline-loading');
+      overview.textContent = 'Preparing programme';
       left.appendChild(overview);
 
       const episodeWatchPercent = getWatchPercent(ep);
@@ -5578,6 +6945,7 @@ async function showShowDetails(group) {
           siblingEpisodes: seasonEpisodes,
         })
           .then((details) => {
+            overview.classList.remove('cinema-inline-loading');
             if (hasReliableEpisodeRating(details)) {
               epRating.className = 'rating-stars';
               epRating.textContent = '';
@@ -5609,11 +6977,13 @@ async function showShowDetails(group) {
           })
           .catch((err) => {
             console.error('Failed to load episode details:', err);
+            overview.classList.remove('cinema-inline-loading');
             overview.textContent = 'Could not load episode details.';
             thumb.style.display = 'none';
             thumbFallback.style.display = '';
           });
       } else {
+        overview.classList.remove('cinema-inline-loading');
         overview.textContent = 'No episode description available.';
         thumb.style.display = 'none';
         thumbFallback.style.display = '';
@@ -5653,11 +7023,13 @@ async function showShowDetails(group) {
       const directorName =
         credits?.crew?.find((person) => person.job === 'Director')?.name
         || credits?.crew?.find((person) => person.department === 'Directing')?.name;
-      fillPeopleChips(directorGroup.chips, directorName ? [directorName] : []);
-      const castNames = credits?.cast?.slice(0, 8).map((person) => person.name).filter(Boolean) || [];
-      fillPeopleChips(castGroup.chips, castNames);
+      const directorPerson = credits?.crew?.find((person) => person.name === directorName);
+      fillPeopleCards(directorGroup.chips, directorPerson ? [directorPerson] : []);
+      fillPeopleCards(castGroup.chips, credits?.cast?.slice(0, 8) || []);
     } catch (err) {
       console.error('Failed to load show credits:', err);
+      fillPeopleCards(directorGroup.chips, []);
+      fillPeopleCards(castGroup.chips, []);
     }
   }
 }
@@ -5668,6 +7040,11 @@ async function showDetails(file) {
   content.innerHTML = '';
   const header = document.createElement('div');
   header.classList.add('details-header');
+  if (getAppTheme() === 'electric-lounge') {
+    header.classList.add('electric-private-room');
+    const backdrop = buildTmdbBackdropUrl(file.data?.backdrop_path, 1280) || getMoviePosterSrc(file, 500);
+    header.style.setProperty('--details-backdrop-image', `url("${String(backdrop || '').replace(/"/g, '%22')}")`);
+  }
 
   // back button
   const backBtn = document.createElement('button');
@@ -5681,6 +7058,7 @@ async function showDetails(file) {
   // poster
   const poster = document.createElement('img');
   poster.src = getMoviePosterSrc(file);
+  poster.alt = file.data?.title || file.name || 'Movie poster';
   poster.classList.add('details-poster');
   header.appendChild(poster);
 
@@ -5719,7 +7097,7 @@ async function showDetails(file) {
   primaryCard.classList.add('details-card');
 
   const directorGroup = createPeopleGroup('Director');
-  fillPeopleChips(directorGroup.chips, []);
+  fillPeopleLoading(directorGroup.chips);
 
   const runtime = document.createElement('p');
   runtime.textContent = 'Runtime: Unknown';
@@ -5736,13 +7114,14 @@ async function showDetails(file) {
   castCard.classList.add('details-card');
 
   const castGroup = createPeopleGroup('Cast');
-  fillPeopleChips(castGroup.chips, []);
+  fillPeopleLoading(castGroup.chips);
   castCard.appendChild(castGroup.wrap);
 
   metaGrid.appendChild(primaryCard);
   metaGrid.appendChild(castCard);
 
   info.appendChild(titleRow);
+  info.appendChild(createDetailsBadges(getQualityTagsForItem(file), hasSubtitlesOnItem(file)));
   info.appendChild(overview);
   info.appendChild(separator);
   info.appendChild(metaGrid);
@@ -5752,7 +7131,8 @@ async function showDetails(file) {
 
   // play button
   const playBtn = document.createElement('button');
-  playBtn.textContent = 'Play';
+  playBtn.classList.add('details-play-primary');
+  playBtn.innerHTML = `${getPlayerIconSvg('play')}<span>${getWatchPercent(file) > 0 && getWatchPercent(file) < 100 ? 'Resume' : 'Play Movie'}</span>`;
   playBtn.addEventListener('click', () => {
     showEpisodePlayer(file, () => showDetails(file));
   });
@@ -5925,12 +7305,12 @@ async function showDetails(file) {
       const runtimeValue = details?.runtime;
       const ratingValue = details?.vote_average ?? file.data?.vote_average;
       const genreValue = details?.genres?.map((genre) => genre.name).join(', ');
-      const castNames = credits?.cast?.slice(0, 8).map((person) => person.name).filter(Boolean) || [];
+      const directorPerson = credits?.crew?.find((person) => person.name === directorName);
 
-      fillPeopleChips(directorGroup.chips, directorName ? [directorName] : []);
+      fillPeopleCards(directorGroup.chips, directorPerson ? [directorPerson] : []);
       runtime.textContent = runtimeValue ? `Runtime: ${runtimeValue} min` : 'Runtime: Unknown';
       genres.textContent = genreValue ? `Genres: ${genreValue}` : 'Genres: Unknown';
-      fillPeopleChips(castGroup.chips, castNames);
+      fillPeopleCards(castGroup.chips, credits?.cast?.slice(0, 8) || []);
       if (ratingValue) setRatingStars(ratingStars, ratingValue, true);
 
       const videos = file.movieExtras?.videos || await fetchMovieVideos(file.data.id);
@@ -5938,6 +7318,8 @@ async function showDetails(file) {
       trailerBtn.disabled = !pickBestMovieTrailer(videos);
     } catch (err) {
       console.error('Failed to load movie details:', err);
+      fillPeopleCards(directorGroup.chips, []);
+      fillPeopleCards(castGroup.chips, []);
     }
   }
 }
@@ -5976,6 +7358,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  const initialContent = document.getElementById('content');
+  if (initialContent && getAppTheme() === 'electric-lounge') {
+    initialContent.replaceChildren(createCinemaLoader('Opening the Electric Lounge...'));
+  }
+
   window.addEventListener('beforeunload', () => {
     if (searchRenderTimer) {
       clearTimeout(searchRenderTimer);
@@ -5999,6 +7386,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   await refreshAccountState({ mergeProgress: true, persistLibrary: true, syncProgress: true });
   showHome('all');
+  hydrateMissingMediaMeasurements().then((result) => {
+    if (result.updated) addLog(`Detected quality and runtime for ${result.updated} media item(s).`);
+  }).catch((err) => {
+    console.warn('Background media inspection failed:', err);
+  });
 
   if (homeLogo) {
     homeLogo.addEventListener('click', () => {
@@ -6035,6 +7427,12 @@ window.addEventListener('DOMContentLoaded', async () => {
       showAccountPage();
     });
   }
+
+  document.addEventListener('click', (event) => {
+    const selector = '.side-btn, .season-tab, .home-rail-btn, .featured-carousel-dot, [data-app-theme-option], [data-manager-mode]';
+    if (!event.target.closest(selector)) return;
+    playCinemaSound('click');
+  });
 
   if (searchInput) {
     searchInput.addEventListener('input', () => {
@@ -6085,7 +7483,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (importFromDeviceBtn) {
-    importFromDeviceBtn.addEventListener('click', async () => {
+    importFromDeviceBtn.addEventListener('click', async (event) => {
+      event.stopPropagation();
       if (!ensureAdminAccess()) return;
       try {
         toggleImportDropdown(false);
@@ -6110,7 +7509,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (importFromCdBtn) {
-    importFromCdBtn.addEventListener('click', async () => {
+    importFromCdBtn.addEventListener('click', async (event) => {
+      event.stopPropagation();
       if (!ensureAdminAccess()) return;
       try {
         toggleImportDropdown(false);

@@ -1,0 +1,50 @@
+<svg width="160" height="320" viewBox="0 0 160 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="lampGlow" cx="50%" cy="25%" r="55%">
+      <stop offset="0%" stop-color="#ffe9b8" stop-opacity="0.75"/>
+      <stop offset="50%" stop-color="#ffd98a" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ffc864" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lampShade" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#eddcae"/>
+      <stop offset="100%" stop-color="#c9a968"/>
+    </linearGradient>
+    <linearGradient id="lampMetal" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3a2a14"/>
+      <stop offset="45%" stop-color="#caa35c"/>
+      <stop offset="55%" stop-color="#8a6530"/>
+      <stop offset="100%" stop-color="#241a0a"/>
+    </linearGradient>
+    <linearGradient id="woodTable" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4a2e1a"/>
+      <stop offset="100%" stop-color="#2a1a0e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ambient glow -->
+  <ellipse cx="80" cy="80" rx="75" ry="85" fill="url(#lampGlow)"/>
+
+  <!-- lamp shade -->
+  <path d="M40,75 L120,75 L108,20 L52,20 Z" fill="url(#lampShade)" stroke="#8a6530" stroke-width="1.5"/>
+  <ellipse cx="80" cy="20" rx="28" ry="5" fill="#f4e0a8" opacity="0.5"/>
+  <ellipse cx="80" cy="72" rx="6" ry="2.5" fill="#fff4d6" opacity="0.9"/>
+
+  <!-- lamp pole -->
+  <rect x="76" y="75" width="8" height="100" fill="url(#lampMetal)"/>
+  <ellipse cx="80" cy="75" rx="9" ry="3" fill="#caa35c"/>
+
+  <!-- lamp base, resting directly on table surface -->
+  <ellipse cx="80" cy="178" rx="20" ry="6" fill="url(#lampMetal)"/>
+  <ellipse cx="80" cy="176" rx="20" ry="5" fill="#caa35c" opacity="0.6"/>
+
+  <!-- table top surface (lamp base sits on this) -->
+  <ellipse cx="80" cy="182" rx="60" ry="14" fill="#5a3a22"/>
+  <ellipse cx="80" cy="180" rx="60" ry="13" fill="#6e4a2a"/>
+
+  <!-- table apron/skirt below the top -->
+  <path d="M20,186 Q80,210 140,186 L140,196 Q80,220 20,196 Z" fill="url(#woodTable)"/>
+
+  <!-- table legs -->
+  <rect x="32" y="198" width="5" height="42" fill="#2a1a0e"/>
+  <rect x="123" y="198" width="5" height="42" fill="#2a1a0e"/>
+</svg>

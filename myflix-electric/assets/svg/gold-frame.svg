@@ -1,0 +1,47 @@
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="frameWood" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2e1d10"/>
+      <stop offset="50%" stop-color="#1c120a"/>
+      <stop offset="100%" stop-color="#120b06"/>
+    </linearGradient>
+    <linearGradient id="brassTopLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0d28e"/>
+      <stop offset="35%" stop-color="#c89c52"/>
+      <stop offset="65%" stop-color="#9a7234"/>
+      <stop offset="100%" stop-color="#6e4d22"/>
+    </linearGradient>
+    <linearGradient id="brassBottomRight" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#5a3e1c"/>
+      <stop offset="50%" stop-color="#8a6530"/>
+      <stop offset="100%" stop-color="#c8a35c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- the frame body is a donut: outer 240x240 minus inner 200x200 hole, drawn with evenodd so the center is truly empty -->
+  <!-- outer wood base layer -->
+  <path d="M0,0 H240 V240 H0 Z M20,20 H220 V220 H20 Z" fill="url(#frameWood)" fill-rule="evenodd"/>
+
+  <!-- brass inlay strip, inset from the wood edge -->
+  <path d="M6,6 H234 V234 H6 Z M26,26 H214 V214 H26 Z" fill="url(#brassTopLeft)" fill-rule="evenodd" opacity="0.95"/>
+
+  <!-- thin dark reveal line separating brass from inner mat -->
+  <path d="M22,22 H218 V218 H22 Z M26,26 H214 V214 H26 Z" fill="#0c0805" fill-rule="evenodd"/>
+
+  <!-- inner bevel catch-light (bottom-right brighter, simulates light from upper-left like the reference) -->
+  <path d="M8,8 H232 V232 H8 Z M24,24 H216 V216 H24 Z" fill="url(#brassBottomRight)" fill-rule="evenodd" opacity="0.35"/>
+
+  <!-- outermost hairline -->
+  <rect x="0.75" y="0.75" width="238.5" height="238.5" fill="none" stroke="#0c0805" stroke-width="1.5"/>
+
+  <!-- innermost hairline against the poster -->
+  <rect x="19.5" y="19.5" width="201" height="201" fill="none" stroke="#0c0805" stroke-width="1.5"/>
+
+  <!-- small corner rivets, brass picture-frame detail -->
+  <g fill="#f0d28e" opacity="0.85">
+    <circle cx="13" cy="13" r="1.6"/>
+    <circle cx="227" cy="13" r="1.6"/>
+    <circle cx="13" cy="227" r="1.6"/>
+    <circle cx="227" cy="227" r="1.6"/>
+  </g>
+</svg>

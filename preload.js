@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   selectMediaFromCd: () => ipcRenderer.invoke('select-media-from-cd'),
   selectSubtitleFiles: () => ipcRenderer.invoke('select-subtitles'),
   selectPosterFile: () => ipcRenderer.invoke('select-poster'),
+  probeMediaFile: (filePath) => ipcRenderer.invoke('media:probe', filePath),
   prepareSubtitleFile: (subtitlePath) => ipcRenderer.invoke('prepare-subtitle-file', subtitlePath),
   scanMissingLibraryItems: (items) => ipcRenderer.invoke('library:scan-missing', items),
   selectRelinkFile: (oldPath) => ipcRenderer.invoke('library:select-relink-file', oldPath),

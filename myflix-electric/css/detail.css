@@ -1,0 +1,121 @@
+/* ==========================================================================
+   detail.css — Movie/Series detail page styles. Uses a simpler dark
+   backdrop (not the wood-paneled wall) so the ornate cinema-lobby look
+   stays special to the Lobby hero, per design direction.
+   ========================================================================== */
+
+.detail-hero {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--space-7);
+  padding-bottom: var(--space-7);
+  margin-bottom: var(--space-7);
+  border-bottom: 1px solid rgba(202,163,92,0.12);
+}
+
+.detail-hero__poster {
+  position: relative;
+}
+
+.detail-hero__poster .lit-frame__light {
+  width: 100%;
+  margin-bottom: -22px;
+}
+
+.detail-hero__info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.detail-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-brass);
+  margin-bottom: var(--space-3);
+}
+
+.detail-title {
+  font-size: 42px;
+  line-height: 1.05;
+  color: var(--color-cream);
+  margin-bottom: var(--space-4);
+}
+
+.detail-meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-5);
+}
+
+.detail-meta-row span:not(:last-child)::after {
+  content: '•';
+  margin-left: var(--space-3);
+  opacity: 0.4;
+}
+
+.detail-badges-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.detail-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 5px 11px;
+  border-radius: 5px;
+  background: rgba(202,163,92,0.1);
+  border: 1px solid rgba(202,163,92,0.3);
+  color: var(--color-brass-light);
+}
+
+.detail-synopsis {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--color-cream-dim);
+  max-width: 640px;
+  margin-bottom: var(--space-6);
+}
+
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.detail-progress-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 420px;
+}
+
+.detail-progress-row .progress-track { flex: 1; height: 4px; }
+.detail-progress-row span { font-size: 12px; color: var(--color-text-muted); white-space: nowrap; }
+
+.detail-cast-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.cast-chip {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding: 5px 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+}
