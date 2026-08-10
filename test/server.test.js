@@ -24,6 +24,8 @@ const { createApp } = require('../server');
 
 let server;
 let baseUrl;
+let normalSessionToken;
+let adminSessionToken;
 
 test.before(async () => {
   const scanner = new MediaScanner({
@@ -73,12 +75,29 @@ test('admin scan APIs enforce account permissions', async () => {
   }).then((response) => response.json());
   const normal = await signup('viewer@example.com');
   const admin = await signup('admin@example.com');
+  normalSessionToken = normal.sessionToken;
+  adminSessionToken = admin.sessionToken;
   assert.equal(normal.user.isAdmin, false);
   assert.equal(admin.user.isAdmin, true);
   const denied = await fetch(`${baseUrl}/api/admin/library/scan/status`, { headers: { Authorization: `Bearer ${normal.sessionToken}` } });
   const allowed = await fetch(`${baseUrl}/api/admin/library/scan/status`, { headers: { Authorization: `Bearer ${admin.sessionToken}` } });
   assert.equal(denied.status, 403);
   assert.equal(allowed.status, 200);
+});
+
+test('metadata management endpoints are admin-only', async () => {
+  const [item] = await fetch(`${baseUrl}/api/library`).then((response) => response.json());
+  const path = `/api/admin/metadata/search?type=movie&id=${encodeURIComponent(item.id)}&q=Range%20Test`;
+  const anonymous = await fetch(`${baseUrl}${path}`);
+  const denied = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${normalSessionToken}` } });
+  const admin = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${adminSessionToken}` } });
+  const metadataStatus = await fetch(`${baseUrl}/api/admin/library/metadata/status`, {
+    headers: { Authorization: `Bearer ${adminSessionToken}` },
+  });
+  assert.equal(anonymous.status, 401);
+  assert.equal(denied.status, 403);
+  assert.equal(admin.status, 503);
+  assert.equal(metadataStatus.status, 200);
 });
 
 test('cross-origin requests are denied unless configured', async () => {

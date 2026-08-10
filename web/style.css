@@ -1349,3 +1349,1011 @@ body[data-theme="light"] .episode-progress-track {
     font-size: 20px;
   }
 }
+
+/* Electric Lounge desktop experience */
+body[data-app-theme="electric-lounge"] {
+  --bg: #140c09;
+  --card: #21130f;
+  --panel: #170c09;
+  --text: #f4ead8;
+  --muted: #b9a88e;
+  --accent: #8f1720;
+  --accent-bright: #b52a32;
+  --line: rgba(190, 146, 76, 0.38);
+  --brass: #d4ad68;
+  --brass-dark: #7a5525;
+  --wood: #25130d;
+  --velvet: #610f17;
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  background: #140c09;
+}
+
+body[data-app-theme="electric-lounge"] .app-shell {
+  isolation: isolate;
+  background:
+    linear-gradient(90deg, rgba(12, 5, 4, 0.82), rgba(31, 15, 10, 0.38) 42%, rgba(11, 5, 4, 0.72)),
+    url("/electric-assets/walnut-wall-v2-web.webp") center / 760px auto repeat;
+}
+
+body[data-app-theme="electric-lounge"] .navbar {
+  position: relative;
+  z-index: 20;
+  height: 72px;
+  padding: 0 24px 0 27px;
+  border: 0;
+  background: linear-gradient(180deg, rgba(27, 12, 8, 0.98), rgba(18, 8, 6, 0.96));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+}
+
+body[data-app-theme="electric-lounge"] .navbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #5e3a16, #e1bd73 18%, #6f491c 42%, #d7ae62 72%, #573414);
+  box-shadow: 0 1px 8px rgba(222, 177, 95, 0.55);
+}
+
+body[data-app-theme="electric-lounge"] .logo {
+  color: #d7b168;
+  font-size: 29px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-shadow: 0 2px 14px rgba(215, 177, 104, 0.24);
+}
+
+body[data-app-theme="electric-lounge"] .mobile-select,
+body[data-app-theme="electric-lounge"] .search,
+body[data-app-theme="electric-lounge"] .auth-input,
+body[data-app-theme="electric-lounge"] .subtitle-select {
+  color: #f4ead8;
+  border: 1px solid rgba(210, 168, 96, 0.45);
+  border-radius: 5px;
+  background: rgba(17, 8, 6, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(255, 223, 159, 0.04);
+}
+
+body[data-app-theme="electric-lounge"] .search:focus,
+body[data-app-theme="electric-lounge"] .auth-input:focus {
+  border-color: #d7b168;
+  box-shadow: 0 0 0 3px rgba(215, 177, 104, 0.12);
+}
+
+body[data-app-theme="electric-lounge"] .sidebar {
+  position: relative;
+  z-index: 10;
+  width: 174px;
+  padding: 24px 10px;
+  gap: 3px;
+  border: 0;
+  background: linear-gradient(90deg, rgba(18, 8, 6, 0.99), rgba(28, 13, 9, 0.96));
+  box-shadow: 12px 0 28px rgba(0, 0, 0, 0.24);
+}
+
+body[data-app-theme="electric-lounge"] .sidebar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #6a4117, #dfb66a 24%, #76501f 55%, #d1a154 82%, #533112);
+  box-shadow: 2px 0 10px rgba(218, 172, 91, 0.38);
+}
+
+body[data-app-theme="electric-lounge"] .nav-btn {
+  position: relative;
+  width: 100%;
+  height: 49px;
+  padding: 0 13px;
+  gap: 11px;
+  border: 1px solid transparent;
+  border-radius: 14px 4px 4px 14px;
+  color: #d9c9ae;
+  background: transparent;
+  font-family: inherit;
+  letter-spacing: 0.025em;
+}
+
+body[data-app-theme="electric-lounge"] .nav-btn::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+}
+
+body[data-app-theme="electric-lounge"] .nav-btn:hover {
+  color: #fff4df;
+  border-color: rgba(213, 173, 103, 0.28);
+  background: rgba(121, 25, 31, 0.18);
+}
+
+body[data-app-theme="electric-lounge"] .nav-btn.active {
+  color: #fff6e5;
+  border-color: rgba(213, 173, 103, 0.46);
+  background: linear-gradient(90deg, rgba(117, 15, 23, 0.93), rgba(87, 13, 18, 0.52));
+  box-shadow: inset 0 0 18px rgba(203, 52, 58, 0.12);
+}
+
+body[data-app-theme="electric-lounge"] .nav-btn.active::before {
+  background: linear-gradient(#f0cb82, #9b6b2c);
+  box-shadow: 0 0 8px rgba(224, 180, 101, 0.65);
+}
+
+body[data-app-theme="electric-lounge"] .nav-icon {
+  color: #d8ae62;
+}
+
+body[data-app-theme="electric-lounge"] .nav-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+
+body[data-app-theme="electric-lounge"] .side-divider {
+  height: 1px;
+  margin: 3px 11px;
+  background: linear-gradient(90deg, transparent, rgba(207, 164, 91, 0.45), transparent);
+}
+
+body[data-app-theme="electric-lounge"] .main {
+  padding: 20px 30px 42px;
+  background: rgba(10, 5, 4, 0.2);
+  scrollbar-color: #a97836 rgba(17, 8, 6, 0.7);
+  scrollbar-width: thin;
+}
+
+body[data-app-theme="electric-lounge"] .main::-webkit-scrollbar { width: 11px; }
+body[data-app-theme="electric-lounge"] .main::-webkit-scrollbar-track { background: rgba(17, 8, 6, 0.72); }
+body[data-app-theme="electric-lounge"] .main::-webkit-scrollbar-thumb {
+  border: 3px solid rgba(17, 8, 6, 0.72);
+  border-radius: 9px;
+  background: linear-gradient(180deg, #d7af65, #805624);
+}
+
+body[data-app-theme="electric-lounge"] .status {
+  min-height: 18px;
+  margin: 0 0 8px;
+  color: #a9977c;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+body[data-app-theme="electric-lounge"] .home-shelf {
+  margin: 0 0 32px;
+}
+
+body[data-app-theme="electric-lounge"] .home-shelf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0 0 10px;
+}
+
+body[data-app-theme="electric-lounge"] .section-title {
+  position: relative;
+  margin: 0;
+  padding: 0 76px 7px 2px;
+  color: #f3e6d0;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0.055em;
+}
+
+body[data-app-theme="electric-lounge"] .section-title::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, #d4aa60, rgba(212, 170, 96, 0.06));
+}
+
+body[data-app-theme="electric-lounge"] .home-shelf-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+body[data-app-theme="electric-lounge"] .home-see-all,
+body[data-app-theme="electric-lounge"] .home-rail-btn {
+  border: 1px solid rgba(210, 167, 94, 0.42);
+  color: #d9b873;
+  background: rgba(26, 12, 8, 0.78);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+body[data-app-theme="electric-lounge"] .home-see-all {
+  height: 31px;
+  padding: 0 12px;
+  border-radius: 4px;
+}
+
+body[data-app-theme="electric-lounge"] .home-rail-btn {
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  font-size: 23px;
+  line-height: 23px;
+}
+
+body[data-app-theme="electric-lounge"] .home-see-all:hover,
+body[data-app-theme="electric-lounge"] .home-rail-btn:hover {
+  color: #fff4d8;
+  border-color: #dfb96f;
+  background: #6d151d;
+}
+
+body[data-app-theme="electric-lounge"] .featured-hero-wrap {
+  min-height: 350px;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured {
+  position: relative;
+  min-height: 350px;
+  display: grid;
+  grid-template-columns: minmax(330px, 0.9fr) minmax(390px, 1.2fr);
+  align-items: center;
+  gap: 26px;
+  padding: 34px 64px 34px 178px;
+  overflow: hidden;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  bottom: 0;
+  width: 176px;
+  height: 320px;
+  background:
+    url("/electric-assets/wall-sconce-v2-web.webp") center 2px / 48px auto no-repeat,
+    url("/electric-assets/armchair-v2-web.webp") center bottom / 176px auto no-repeat;
+  pointer-events: none;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured::after {
+  content: "";
+  position: absolute;
+  left: 112px;
+  bottom: 3px;
+  width: 70px;
+  height: 95px;
+  background: url("/electric-assets/side-table-v2-web.webp") center bottom / contain no-repeat;
+  pointer-events: none;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-note {
+  position: relative;
+  z-index: 2;
+  min-height: 245px;
+  padding: 33px 38px;
+  border: 0;
+  color: #342215;
+  text-align: left;
+  font-family: inherit;
+  background: url("/electric-assets/ticket-paper-v2-web.webp") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 13px 21px rgba(0, 0, 0, 0.38));
+  cursor: pointer;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-note::after {
+  content: "";
+  position: absolute;
+  inset: 15px 21px;
+  border: 1px solid rgba(122, 76, 29, 0.56);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-note small {
+  position: relative;
+  z-index: 1;
+  color: #7d1a20;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-note h3 {
+  position: relative;
+  z-index: 1;
+  margin: 7px 0 3px;
+  font-size: clamp(24px, 2.5vw, 35px);
+  line-height: 1.02;
+  font-weight: 600;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-meta,
+body[data-app-theme="electric-lounge"] .electric-featured-description {
+  position: relative;
+  z-index: 1;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-meta {
+  margin: 5px 0 11px;
+  color: #785f43;
+  font-size: 11px;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-description {
+  display: -webkit-box;
+  margin: 0 0 15px;
+  overflow: hidden;
+  color: #4f3a28;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-play {
+  position: relative;
+  z-index: 2;
+  width: fit-content;
+  min-height: 35px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 15px;
+  border-radius: 4px;
+  color: #fff0d6;
+  background: linear-gradient(#871b24, #5f1017);
+  box-shadow: 0 4px 12px rgba(74, 7, 11, 0.25);
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-play-icon,
+body[data-app-theme="electric-lounge"] .electric-featured-play-icon svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-play i {
+  width: 1px;
+  height: 19px;
+  background: rgba(255, 231, 191, 0.5);
+  box-shadow: 0 0 5px rgba(255, 226, 175, 0.45);
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-posters {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(25px, 4vw, 58px);
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-poster {
+  position: relative;
+  width: clamp(132px, 13vw, 178px);
+  padding: 64px 0 34px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-poster:not(.is-main) {
+  width: clamp(116px, 11vw, 154px);
+  opacity: 0.84;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-light,
+body[data-app-theme="electric-lounge"] .card-picture-light {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 0;
+  width: 96px;
+  height: 66px;
+  transform: translateX(-50%);
+  background: url("/electric-assets/picture-light-v2-web.webp") center / contain no-repeat;
+  pointer-events: none;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-light::after,
+body[data-app-theme="electric-lounge"] .card-picture-light::after {
+  content: "";
+  position: absolute;
+  left: -35px;
+  top: 36px;
+  width: 166px;
+  height: 115px;
+  background: radial-gradient(ellipse at top, rgba(255, 220, 145, 0.3), transparent 67%);
+  pointer-events: none;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-frame,
+body[data-app-theme="electric-lounge"] .card-poster-wrap,
+body[data-app-theme="electric-lounge"] .detail-poster-frame {
+  position: relative;
+  display: block;
+  border: 12px solid transparent;
+  border-image: url("/electric-assets/brass-frame-v2-web.webp") 56 fill / 16px / 2px stretch;
+  background: #160b08;
+  box-shadow: 0 16px 22px rgba(0, 0, 0, 0.52), 0 0 22px rgba(212, 164, 82, 0.12);
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-frame {
+  aspect-ratio: 2 / 3;
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-poster:hover .electric-featured-frame {
+  transform: translateY(-9px) scale(1.025);
+  box-shadow: 0 23px 30px rgba(0, 0, 0, 0.58), 0 0 29px rgba(226, 179, 97, 0.22);
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-image,
+body[data-app-theme="electric-lounge"] .poster,
+body[data-app-theme="electric-lounge"] .detail-poster {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  background: #160b08;
+}
+
+body[data-app-theme="electric-lounge"] .electric-featured-caption {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 1px;
+  overflow: hidden;
+  color: #ebd9ba;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-app-theme="electric-lounge"] .featured-carousel-nav {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+body[data-app-theme="electric-lounge"] .featured-carousel-arrow,
+body[data-app-theme="electric-lounge"] .featured-carousel-dot {
+  border: 1px solid rgba(211, 169, 94, 0.55);
+  color: #e1bf7a;
+  background: rgba(18, 8, 6, 0.8);
+  cursor: pointer;
+}
+
+body[data-app-theme="electric-lounge"] .featured-carousel-arrow {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 20px;
+}
+
+body[data-app-theme="electric-lounge"] .featured-carousel-dots { display: flex; gap: 6px; }
+body[data-app-theme="electric-lounge"] .featured-carousel-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border-radius: 50%;
+}
+body[data-app-theme="electric-lounge"] .featured-carousel-dot.active { background: #b8262f; box-shadow: 0 0 8px #cf9c51; }
+
+body[data-app-theme="electric-lounge"] .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 29px 24px;
+}
+
+body[data-app-theme="electric-lounge"] .home-horizontal-rail {
+  display: flex;
+  gap: 27px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 9px 4px 15px;
+  scrollbar-width: none;
+}
+body[data-app-theme="electric-lounge"] .home-horizontal-rail::-webkit-scrollbar { display: none; }
+
+body[data-app-theme="electric-lounge"] .electric-media-card {
+  position: relative;
+  min-width: 156px;
+  padding: 55px 0 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+body[data-app-theme="electric-lounge"] .home-horizontal-rail .electric-media-card {
+  width: clamp(146px, 14vw, 179px);
+  flex: 0 0 clamp(146px, 14vw, 179px);
+}
+
+body[data-app-theme="electric-lounge"] .electric-media-card .card-picture-light {
+  top: 0;
+  transition: none;
+}
+
+body[data-app-theme="electric-lounge"] .electric-media-card .card-poster-wrap {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  overflow: visible;
+  transition: transform 220ms ease, filter 220ms ease;
+}
+
+body[data-app-theme="electric-lounge"] .electric-media-card:hover {
+  transform: none;
+}
+
+body[data-app-theme="electric-lounge"] .electric-media-card:hover .card-poster-wrap {
+  transform: translateY(-8px) scale(1.025);
+  filter: brightness(1.08);
+}
+
+body[data-app-theme="electric-lounge"] .electric-media-card .meta {
+  padding: 9px 3px 0;
+  background: transparent;
+}
+
+body[data-app-theme="electric-lounge"] .electric-media-card .title {
+  color: #f0e2cb;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+body[data-app-theme="electric-lounge"] .electric-media-card .sub { color: #a99170; font-size: 11px; }
+
+body[data-app-theme="electric-lounge"] .cc-badge,
+body[data-app-theme="electric-lounge"] .quality-badge,
+body[data-app-theme="electric-lounge"] .details-brass-badge {
+  border: 1px solid #c99c50;
+  border-radius: 2px;
+  color: #f1d99e;
+  background: linear-gradient(#63451d, #33200d);
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 160, 0.16);
+  font-family: Georgia, serif;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+body[data-app-theme="electric-lounge"] .quality-badge {
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  z-index: 5;
+  padding: 3px 5px;
+}
+
+body[data-app-theme="electric-lounge"] .quality-badge + .quality-badge { left: 48px; }
+
+body[data-app-theme="electric-lounge"] .poster-fallback,
+body[data-app-theme="electric-lounge"] .continue-fallback,
+body[data-app-theme="electric-lounge"] .featured-poster-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  color: #dcc49b;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(215, 174, 99, 0.2), transparent 38%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,0.02) 0 2px, transparent 2px 7px),
+    #1c0d09;
+}
+body[data-app-theme="electric-lounge"] .poster-fallback.is-visible,
+body[data-app-theme="electric-lounge"] .continue-fallback.is-visible,
+body[data-app-theme="electric-lounge"] .featured-poster-fallback.is-visible { display: flex; }
+body[data-app-theme="electric-lounge"] .poster-fallback span,
+body[data-app-theme="electric-lounge"] .featured-poster-fallback span { color: #a97935; font-size: 34px; }
+body[data-app-theme="electric-lounge"] .poster-fallback strong,
+body[data-app-theme="electric-lounge"] .featured-poster-fallback strong { font-size: 12px; font-weight: 500; }
+body[data-app-theme="electric-lounge"] .image-unavailable { opacity: 0; }
+
+body[data-app-theme="electric-lounge"] .continue-row { width: 100%; }
+body[data-app-theme="electric-lounge"] .continue-card-landscape {
+  min-width: 315px;
+  flex: 0 0 315px;
+  border: 8px solid transparent;
+  border-image: url("/electric-assets/brass-frame-v2-web.webp") 58 fill / 11px / 1px stretch;
+  border-radius: 2px;
+  overflow: hidden;
+  background: #130907;
+  box-shadow: 0 13px 24px rgba(0, 0, 0, 0.48);
+  transition: transform 200ms ease;
+}
+body[data-app-theme="electric-lounge"] .continue-card-landscape:hover { transform: translateY(-6px); }
+body[data-app-theme="electric-lounge"] .continue-media { aspect-ratio: 16 / 8.5; }
+body[data-app-theme="electric-lounge"] .continue-overlay {
+  background: linear-gradient(0deg, rgba(12, 5, 4, 0.98), rgba(18, 7, 5, 0.08) 88%);
+}
+body[data-app-theme="electric-lounge"] .continue-title { color: #fff0d7; }
+body[data-app-theme="electric-lounge"] .continue-subtitle { color: #c7b28f; }
+body[data-app-theme="electric-lounge"] .continue-progress-row { display: flex; align-items: center; gap: 9px; }
+body[data-app-theme="electric-lounge"] .continue-progress-row .card-progress { flex: 1; }
+body[data-app-theme="electric-lounge"] .continue-progress-percent { color: #e2bd73; font-size: 10px; }
+body[data-app-theme="electric-lounge"] .card-progress { height: 4px; background: rgba(255,255,255,0.16); }
+body[data-app-theme="electric-lounge"] .card-progress-fill { background: linear-gradient(90deg, #8d161f, #dc3940); box-shadow: 0 0 6px rgba(224, 55, 61, 0.45); }
+
+body[data-app-theme="electric-lounge"] .actions { margin-bottom: 12px; }
+body[data-app-theme="electric-lounge"] .ghost-btn,
+body[data-app-theme="electric-lounge"] .solid-btn,
+body[data-app-theme="electric-lounge"] .episode-play {
+  border-radius: 4px;
+  font-family: inherit;
+}
+body[data-app-theme="electric-lounge"] .ghost-btn {
+  color: #dbbd83;
+  border-color: rgba(209, 166, 91, 0.48);
+  background: rgba(24, 11, 8, 0.72);
+}
+body[data-app-theme="electric-lounge"] .solid-btn,
+body[data-app-theme="electric-lounge"] .episode-play {
+  color: #fff0d9;
+  border: 1px solid #bc5559;
+  background: linear-gradient(#8b1e27, #5a0d14);
+  box-shadow: inset 0 0 0 1px rgba(255, 209, 191, 0.08), 0 5px 13px rgba(0, 0, 0, 0.24);
+}
+
+body[data-app-theme="electric-lounge"] .detail-card.electric-private-room {
+  position: relative;
+  isolation: isolate;
+  grid-template-columns: minmax(210px, 270px) minmax(0, 1fr);
+  gap: 32px;
+  padding: 38px;
+  overflow: hidden;
+  border: 1px solid rgba(208, 165, 90, 0.42);
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, rgba(19, 8, 6, 0.98) 0 32%, rgba(27, 12, 8, 0.9) 58%, rgba(14, 6, 5, 0.94)),
+    var(--detail-backdrop, none) center / cover no-repeat,
+    url("/electric-assets/walnut-wall-v2-web.webp") center / 760px auto repeat;
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.48), inset 0 0 55px rgba(0, 0, 0, 0.28);
+}
+
+body[data-app-theme="electric-lounge"] .detail-card.electric-private-room::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 13px;
+  border: 1px solid rgba(217, 176, 102, 0.25);
+  pointer-events: none;
+}
+
+body[data-app-theme="electric-lounge"] .detail-poster-frame {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  align-self: start;
+}
+
+body[data-app-theme="electric-lounge"] .detail-body {
+  position: relative;
+  z-index: 1;
+  padding: 8px 0;
+}
+
+body[data-app-theme="electric-lounge"] .detail-title { color: #f4e5ca; font-size: clamp(29px, 4vw, 48px); font-weight: 500; }
+body[data-app-theme="electric-lounge"] .detail-text { max-width: 820px; color: #c7b89f; line-height: 1.62; }
+body[data-app-theme="electric-lounge"] .detail-separator { background: linear-gradient(90deg, #c99a4f, transparent); }
+body[data-app-theme="electric-lounge"] .details-info-card {
+  border: 1px solid rgba(199, 152, 76, 0.35);
+  border-radius: 3px;
+  background: rgba(20, 8, 6, 0.64);
+  box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.18);
+}
+body[data-app-theme="electric-lounge"] .detail-line { color: #c5ae89; }
+body[data-app-theme="electric-lounge"] .details-people-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+body[data-app-theme="electric-lounge"] .details-person-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 1px solid rgba(194, 146, 70, 0.3);
+  border-radius: 3px;
+  color: #d5c09d;
+  background: rgba(13, 5, 4, 0.55);
+}
+body[data-app-theme="electric-lounge"] .details-person-portrait {
+  width: 34px;
+  height: 42px;
+  object-fit: cover;
+  border: 2px solid #a97936;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+}
+body[data-app-theme="electric-lounge"] .details-brass-badge { display: inline-flex; padding: 5px 7px; }
+body[data-app-theme="electric-lounge"] .details-play-primary { display: inline-flex; align-items: center; gap: 8px; min-width: 108px; justify-content: center; }
+body[data-app-theme="electric-lounge"] .details-play-primary svg { width: 16px; height: 16px; }
+
+body[data-app-theme="electric-lounge"] .season-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+body[data-app-theme="electric-lounge"] .season-tab {
+  color: #d1b57f;
+  border: 1px solid #765527;
+  border-radius: 3px;
+  background: linear-gradient(#382615, #1c1009);
+  font-family: inherit;
+}
+body[data-app-theme="electric-lounge"] .season-tab.active {
+  color: #fff0cc;
+  border-color: #d2a55a;
+  background: linear-gradient(#7e1b23, #4f0c12);
+}
+body[data-app-theme="electric-lounge"] .episode-list { gap: 12px; }
+body[data-app-theme="electric-lounge"] .episode-row {
+  border: 1px solid rgba(196, 149, 75, 0.42);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, rgba(38, 20, 12, 0.97), rgba(21, 9, 7, 0.96)),
+    url("/electric-assets/ticket-paper-v2-web.webp") center / cover;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.26);
+}
+body[data-app-theme="electric-lounge"] .episode-label { color: #efdcb9; }
+body[data-app-theme="electric-lounge"] .episode-overview { color: #bba98b; }
+body[data-app-theme="electric-lounge"] .episode-play { display: inline-flex; align-items: center; gap: 6px; }
+body[data-app-theme="electric-lounge"] .episode-play svg { width: 14px; height: 14px; }
+
+body[data-app-theme="electric-lounge"] .lounge-page-heading { margin: 0 0 18px; }
+body[data-app-theme="electric-lounge"] .lounge-page-heading small { color: #c99d53; letter-spacing: 0.16em; text-transform: uppercase; }
+body[data-app-theme="electric-lounge"] .lounge-page-heading h2 { margin: 5px 0; color: #f1e2c8; font-size: 32px; font-weight: 500; }
+body[data-app-theme="electric-lounge"] .lounge-page-heading p { margin: 0; color: #a99574; }
+
+body[data-app-theme="electric-lounge"] .membership-card {
+  position: relative;
+  max-width: 760px;
+  min-height: 250px;
+  padding: 48px 68px;
+  overflow: hidden;
+  border: 0;
+  color: #352315;
+  background: url("/electric-assets/ticket-paper-v2-web.webp") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 18px 25px rgba(0, 0, 0, 0.4));
+}
+body[data-app-theme="electric-lounge"] .membership-card::after {
+  content: "MEMBER  /  ELECTRIC LOUNGE";
+  position: absolute;
+  right: 52px;
+  bottom: 35px;
+  color: rgba(104, 61, 27, 0.58);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+body[data-app-theme="electric-lounge"] .membership-card .account-title { color: #3c2818; font-size: 28px; }
+body[data-app-theme="electric-lounge"] .membership-card .account-copy { color: #6f5438; }
+body[data-app-theme="electric-lounge"] .account-divider { background: rgba(111, 75, 35, 0.35); }
+body[data-app-theme="electric-lounge"] .account-collection-title { margin-top: 30px; }
+
+body[data-app-theme="electric-lounge"] .cinema-control-panel {
+  max-width: 900px;
+  margin-top: 22px;
+  padding: 24px;
+  border: 10px solid transparent;
+  border-image: url("/electric-assets/brass-frame-v2-web.webp") 58 fill / 12px / 1px stretch;
+  background: linear-gradient(135deg, rgba(37, 18, 12, 0.98), rgba(18, 8, 6, 0.98));
+  box-shadow: 0 15px 28px rgba(0,0,0,0.38);
+}
+body[data-app-theme="electric-lounge"] .settings-preference-row {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px 2px;
+  border-bottom: 1px solid rgba(198, 150, 75, 0.22);
+  color: #dcc8a8;
+}
+body[data-app-theme="electric-lounge"] .settings-preference-row input[type="checkbox"] { position: absolute; opacity: 0; }
+body[data-app-theme="electric-lounge"] .brass-toggle {
+  width: 48px;
+  height: 25px;
+  position: relative;
+  border: 1px solid #9e7237;
+  border-radius: 20px;
+  background: #28160d;
+}
+body[data-app-theme="electric-lounge"] .brass-toggle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: linear-gradient(#efca7e, #8c5f28);
+  transition: transform 180ms ease;
+}
+body[data-app-theme="electric-lounge"] .settings-preference-row input:checked + .brass-toggle { background: #6d141b; }
+body[data-app-theme="electric-lounge"] .settings-preference-row input:checked + .brass-toggle::after { transform: translateX(23px); }
+
+body[data-app-theme="electric-lounge"] .admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  gap: 9px;
+  margin: 18px 0;
+}
+body[data-app-theme="electric-lounge"] .admin-stat-grid > span {
+  min-height: 73px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10px;
+  border: 1px solid rgba(199, 152, 75, 0.35);
+  text-align: center;
+  background: rgba(15, 6, 5, 0.5);
+}
+body[data-app-theme="electric-lounge"] .admin-stat-grid strong { color: #e3bd73; font-size: 22px; }
+body[data-app-theme="electric-lounge"] .admin-stat-grid small { color: #9f8a69; }
+
+body[data-app-theme="electric-lounge"] .metadata-dialog {
+  width: min(980px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 26px;
+  border: 10px solid transparent;
+  border-image: url("/electric-assets/brass-frame-v2-web.webp") 58 fill / 12px / 1px stretch;
+  color: #f0e2c9;
+  background: linear-gradient(135deg, #2a160f, #130806);
+  box-shadow: 0 30px 70px rgba(0,0,0,0.72);
+}
+body[data-app-theme="electric-lounge"] .metadata-dialog-header,
+body[data-app-theme="electric-lounge"] .metadata-search-row,
+body[data-app-theme="electric-lounge"] .metadata-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+body[data-app-theme="electric-lounge"] .metadata-dialog-header small { color: #c79b52; letter-spacing: 0.14em; }
+body[data-app-theme="electric-lounge"] .metadata-dialog-header h2 { margin: 3px 0 13px; }
+body[data-app-theme="electric-lounge"] .metadata-search-row .auth-input { flex: 1; height: 40px; }
+body[data-app-theme="electric-lounge"] .metadata-dialog-message { color: #baa789; }
+body[data-app-theme="electric-lounge"] .metadata-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 13px;
+  margin: 18px 0;
+}
+body[data-app-theme="electric-lounge"] .metadata-result-card {
+  min-height: 205px;
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 13px;
+  padding: 10px;
+  border: 1px solid rgba(206, 159, 81, 0.38);
+  background: rgba(15, 6, 5, 0.64);
+}
+body[data-app-theme="electric-lounge"] .metadata-result-poster { position: relative; min-height: 160px; overflow: hidden; background: #160a07; }
+body[data-app-theme="electric-lounge"] .metadata-result-poster img { width: 100%; height: 100%; object-fit: cover; }
+body[data-app-theme="electric-lounge"] .metadata-result-body h3 { margin: 3px 0 5px; color: #efddbd; font-size: 17px; }
+body[data-app-theme="electric-lounge"] .metadata-result-body p { margin: 0 0 9px; color: #ac997b; font-size: 11px; line-height: 1.4; }
+
+body[data-app-theme="electric-lounge"] .player-view { background: #050302; }
+body[data-app-theme="electric-lounge"] .player-header { border-bottom-color: #6f4c22; background: linear-gradient(#1d0d09, #0f0605); }
+body[data-app-theme="electric-lounge"] .player-controls { background: linear-gradient(transparent, rgba(6, 2, 2, 0.95)); }
+body[data-app-theme="electric-lounge"] .player-timeline { accent-color: #b3212a; }
+body[data-app-theme="electric-lounge"] .player-control-btn { color: #f1dfbf; }
+
+body[data-app-theme="electric-lounge"] .cinema-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  visibility: hidden;
+  pointer-events: none;
+}
+body[data-app-theme="electric-lounge"] .cinema-transition.is-active { visibility: visible; }
+body[data-app-theme="electric-lounge"] .cinema-curtain {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 52%;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 5%, rgba(0,0,0,0.17) 5% 10%),
+    linear-gradient(90deg, #3f070d, #8b1721 50%, #3c060b);
+  transition: transform 560ms cubic-bezier(.65,0,.35,1);
+  box-shadow: inset 0 0 45px rgba(0,0,0,0.55);
+}
+body[data-app-theme="electric-lounge"] .cinema-curtain-left { left: 0; transform: translateX(-102%); }
+body[data-app-theme="electric-lounge"] .cinema-curtain-right { right: 0; transform: translateX(102%); }
+body[data-app-theme="electric-lounge"] .cinema-transition.is-closing .cinema-curtain { transform: translateX(0); }
+body[data-app-theme="electric-lounge"] .cinema-transition.is-opening .cinema-curtain-left { transform: translateX(-102%); }
+body[data-app-theme="electric-lounge"] .cinema-transition.is-opening .cinema-curtain-right { transform: translateX(102%); }
+body[data-app-theme="electric-lounge"] .cinema-transition-center {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #e9c479;
+  font-size: 24px;
+  letter-spacing: 0.18em;
+  opacity: 0;
+  transition: opacity 180ms ease 250ms;
+}
+body[data-app-theme="electric-lounge"] .cinema-transition.is-closing .cinema-transition-center { opacity: 1; }
+
+@media (max-width: 1180px) {
+  body[data-app-theme="electric-lounge"] .electric-featured {
+    grid-template-columns: minmax(300px, 0.9fr) minmax(300px, 1fr);
+    padding-left: 128px;
+    padding-right: 24px;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured::before { width: 126px; background-size: 38px auto, 126px auto; }
+  body[data-app-theme="electric-lounge"] .electric-featured::after { display: none; }
+  body[data-app-theme="electric-lounge"] .electric-featured-posters { gap: 20px; }
+  body[data-app-theme="electric-lounge"] .sidebar { width: 158px; }
+}
+
+@media (max-width: 920px) {
+  body[data-app-theme="electric-lounge"] .navbar { height: auto; padding: 12px 16px 15px; }
+  body[data-app-theme="electric-lounge"] .electric-featured {
+    grid-template-columns: 1fr;
+    padding: 26px 20px 24px 104px;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured::before { width: 98px; background-size: 31px auto, 92px auto; }
+  body[data-app-theme="electric-lounge"] .electric-featured-posters { justify-content: flex-start; }
+  body[data-app-theme="electric-lounge"] .detail-card.electric-private-room { grid-template-columns: 190px 1fr; padding: 28px; }
+  body[data-app-theme="electric-lounge"] .admin-stat-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 700px) {
+  body[data-app-theme="electric-lounge"] { overflow: auto; }
+  body[data-app-theme="electric-lounge"] .sidebar {
+    width: 100%;
+    padding: 8px 12px 11px;
+    flex-direction: row;
+    overflow-x: auto;
+    border-bottom: 3px solid #9a6b2d;
+  }
+  body[data-app-theme="electric-lounge"] .sidebar::after,
+  body[data-app-theme="electric-lounge"] .side-divider { display: none; }
+  body[data-app-theme="electric-lounge"] .nav-btn { min-width: 116px; width: auto; border-radius: 12px; }
+  body[data-app-theme="electric-lounge"] .nav-btn::before { display: none; }
+  body[data-app-theme="electric-lounge"] .main { padding: 18px 14px 34px; }
+  body[data-app-theme="electric-lounge"] .electric-featured {
+    min-height: 0;
+    padding: 18px;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured::before,
+  body[data-app-theme="electric-lounge"] .electric-featured::after { display: none; }
+  body[data-app-theme="electric-lounge"] .electric-featured-note { min-height: 225px; padding: 31px; }
+  body[data-app-theme="electric-lounge"] .electric-featured-posters { overflow-x: auto; padding-top: 4px; }
+  body[data-app-theme="electric-lounge"] .electric-featured-poster { min-width: 135px; }
+  body[data-app-theme="electric-lounge"] .home-shelf-header { align-items: flex-end; }
+  body[data-app-theme="electric-lounge"] .home-see-all { display: none; }
+  body[data-app-theme="electric-lounge"] .detail-card.electric-private-room { grid-template-columns: 1fr; padding: 24px; }
+  body[data-app-theme="electric-lounge"] .detail-poster-frame { width: min(260px, 82vw); margin: auto; }
+  body[data-app-theme="electric-lounge"] .membership-card { padding: 42px 38px; }
+  body[data-app-theme="electric-lounge"] .metadata-result-card { grid-template-columns: 90px 1fr; }
+  body[data-app-theme="electric-lounge"] .metadata-search-row { align-items: stretch; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-app-theme="electric-lounge"] *,
+  body[data-app-theme="electric-lounge"] *::before,
+  body[data-app-theme="electric-lounge"] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

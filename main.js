@@ -1384,4 +1384,33 @@ ipcMain.handle('server:library-scan-status', async () => {
   }
 });
 
+ipcMain.handle('server:metadata-refresh', async () => {
+  if (!hasSharedServer()) return { ok: false, error: 'Shared server mode is not configured.' };
+  const session = await getCurrentSharedAccountSession();
+  if (!session.user?.isAdmin || !session.token) return { ok: false, error: 'Administrator access required.' };
+  try {
+    const { response, payload } = await requestSharedServerJson('/api/admin/library/metadata/refresh', {
+      method: 'POST',
+      token: session.token,
+    });
+    return payload || { ok: response.ok };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Shared server unavailable.' };
+  }
+});
+
+ipcMain.handle('server:metadata-refresh-status', async () => {
+  if (!hasSharedServer()) return { ok: false, error: 'Shared server mode is not configured.' };
+  const session = await getCurrentSharedAccountSession();
+  if (!session.user?.isAdmin || !session.token) return { ok: false, error: 'Administrator access required.' };
+  try {
+    const { response, payload } = await requestSharedServerJson('/api/admin/library/metadata/status', {
+      token: session.token,
+    });
+    return payload || { ok: response.ok };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Shared server unavailable.' };
+  }
+});
+
 app.whenReady().then(createWindow);

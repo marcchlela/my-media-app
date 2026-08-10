@@ -52,6 +52,7 @@ const SESSION_COOKIE_NAME = 'my_media_session';
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const MOBILE_DIR = path.join(__dirname, 'mobile');
 const WEB_DIR = path.join(__dirname, 'web');
+const ELECTRIC_ASSET_DIR = path.join(__dirname, 'myflix-electric', 'assets', 'generated-3d');
 const SUBTITLE_CACHE_DIR = path.join(DATA_DIR, 'cache', 'subtitles');
 const TMDB_API_BASE = 'https://api.themoviedb.org/3';
 const TMDB_API_KEY = resolveTmdbApiKey();
@@ -245,6 +246,11 @@ function createApp(options = {}) {
   });
   app.use('/mobile', express.static(MOBILE_DIR, { fallthrough: true, maxAge: NODE_ENV === 'production' ? '1h' : 0 }));
   app.use('/web', express.static(WEB_DIR, { fallthrough: true, maxAge: NODE_ENV === 'production' ? '1h' : 0 }));
+  app.use('/electric-assets', express.static(ELECTRIC_ASSET_DIR, {
+    fallthrough: false,
+    immutable: NODE_ENV === 'production',
+    maxAge: NODE_ENV === 'production' ? '7d' : 0,
+  }));
 
   app.get('/', (_req, res) => {
     const counts = getCatalogCounts();
@@ -348,6 +354,51 @@ function createApp(options = {}) {
     return res.status(202).json({ ok: true, status: scanner.getStatus() });
   });
   app.get('/api/admin/library/scan/status', requireAdmin, (_req, res) => res.json({ ok: true, status: scanner.getStatus() }));
+  app.post('/api/admin/library/metadata/refresh', requireAdmin, (_req, res) => {
+    const result = scanner.refreshMissingMetadata();
+    return res.status(result.started ? 202 : 409).json({ ok: result.started, ...result });
+  });
+  app.get('/api/admin/library/metadata/status', requireAdmin, (_req, res) => (
+    res.json({ ok: true, status: scanner.getMetadataStatus() })
+  ));
+  app.get('/api/admin/metadata/search', requireAdmin, async (req, res) => {
+    const targetType = req.query.type === 'show' ? 'show' : req.query.type === 'movie' ? 'movie' : '';
+    const targetId = String(req.query.id || '');
+    if (!targetType || !targetId) return res.status(400).json({ ok: false, error: 'Invalid metadata target.' });
+    try {
+      const result = await scanner.metadataManager.search(targetType, targetId, String(req.query.q || ''));
+      return res.json({ ok: true, ...result });
+    } catch (err) {
+      return res.status(/not configured/i.test(err.message) ? 503 : 400).json({ ok: false, error: err.message });
+    }
+  });
+  app.post('/api/admin/metadata/match', requireAdmin, async (req, res) => {
+    const targetType = req.body?.targetType === 'show' ? 'show' : req.body?.targetType === 'movie' ? 'movie' : '';
+    const targetId = String(req.body?.targetId || '');
+    const tmdbId = positiveInteger(req.body?.tmdbId);
+    if (!targetType || !targetId || !tmdbId) return res.status(400).json({ ok: false, error: 'Invalid metadata selection.' });
+    try {
+      const result = await scanner.metadataManager.applyManualMatch(targetType, targetId, tmdbId);
+      return res.json({ ok: true, ...result });
+    } catch (err) {
+      return res.status(/not configured/i.test(err.message) ? 503 : 400).json({ ok: false, error: err.message });
+    }
+  });
+  app.delete('/api/admin/metadata/match', requireAdmin, (req, res) => {
+    const targetType = req.body?.targetType === 'show' ? 'show' : req.body?.targetType === 'movie' ? 'movie' : '';
+    const targetId = String(req.body?.targetId || '');
+    if (!targetType || !targetId || !scanner.metadataManager.clearManualMatch(targetType, targetId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid metadata target.' });
+    }
+    return res.json({ ok: true });
+  });
+  app.post('/api/admin/metadata/retry', requireAdmin, async (req, res) => {
+    const targetType = req.body?.targetType === 'show' ? 'show' : req.body?.targetType === 'movie' ? 'movie' : '';
+    const targetId = String(req.body?.targetId || '');
+    if (!targetType || !targetId) return res.status(400).json({ ok: false, error: 'Invalid metadata target.' });
+    const result = await scanner.metadataManager.retryAutomatic(targetType, targetId);
+    return res.status(result.state === 'failed' ? 400 : 200).json({ ok: result.state === 'matched', ...result });
+  });
   app.patch('/api/admin/media/:id/metadata', requireAdmin, (req, res) => {
     if (!updateAdminMetadata(String(req.params.id || ''), req.body || {})) return res.status(404).json({ ok: false, error: 'Media item not found.' });
     return res.json({ ok: true });
@@ -357,6 +408,7 @@ function createApp(options = {}) {
     catalog: getCatalogCounts(),
     mediaSources: safeSourceStatus(),
     scan: scanner.getStatus(),
+    metadata: scanner.getMetadataStatus(),
   }));
 
   installTmdbRoutes(app);

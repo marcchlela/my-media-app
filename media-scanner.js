@@ -3,6 +3,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const ffprobeStatic = require('ffprobe-static');
+const { MetadataManager } = require('./metadata-manager');
 const {
   findMediaByPath,
   findRelinkCandidate,
@@ -133,6 +134,7 @@ class MediaScanner {
     this.tvShowsDir = path.resolve(options.tvShowsDir || '/media/TV Shows');
     this.inspectMedia = options.inspectMedia || inspectMediaFile;
     this.tmdb = options.tmdb || createTmdbService();
+    this.metadataManager = options.metadataManager || new MetadataManager({ tmdb: this.tmdb });
     this.running = false;
     this.status = {
       running: false,
@@ -152,6 +154,14 @@ class MediaScanner {
     return JSON.parse(JSON.stringify(this.status));
   }
 
+  getMetadataStatus() {
+    return this.metadataManager.getStatus();
+  }
+
+  refreshMissingMetadata() {
+    return this.metadataManager.startMissingRefresh();
+  }
+
   async importLegacyLibrary(items) {
     if (getSetting('legacy_library_imported') === '1' || !Array.isArray(items) || !items.length) return 0;
     const movieSource = upsertMediaSource('movies', this.moviesDir);
@@ -166,6 +176,7 @@ class MediaScanner {
       const showTitle = item.showName || item.data?.name || episodeInfo?.showName || 'Unknown Show';
       const show = isShow ? upsertShow(showTitle, {
         ...legacyMeta,
+        sourceTitle: episodeInfo?.showName || showTitle,
         releaseDate: item.data?.first_air_date || legacyMeta.releaseDate,
       }) : null;
       const title = isShow
@@ -180,6 +191,7 @@ class MediaScanner {
         relativePath: path.relative(source.root_path, item.path),
         filename: path.basename(item.path),
         title,
+        sourceTitle: isShow ? (episodeInfo?.episodeTitle || title) : titleFromFilename(item.name || item.path),
         normalizedTitle: normalizeComparable(title),
         seasonNumber: item.episode?.season || episodeInfo?.season || null,
         episodeNumber: item.episode?.episode || episodeInfo?.episode || null,
@@ -301,10 +313,12 @@ class MediaScanner {
     let showMetadata = null;
     if (tvInfo) {
       const existingShow = getDb().prepare('SELECT * FROM shows WHERE normalized_title = ?').get(normalizeComparable(tvInfo.showName));
-      if (!existingShow && this.tmdb.configured) {
-        showMetadata = await this.tmdb.enrichShow(tvInfo.showName).catch(() => null);
+      const showNeedsMetadata = !existingShow?.metadata_locked
+        && (!existingShow?.tmdb_id || !existingShow?.poster_path);
+      if ((!existingShow || showNeedsMetadata) && this.tmdb.configured) {
+        showMetadata = await this.tmdb.enrichShow(tvInfo.showLookupName || tvInfo.showName).catch(() => null);
       }
-      show = upsertShow(showMetadata?.title || tvInfo.showName, showMetadata || {});
+      show = upsertShow(tvInfo.showName, { ...(showMetadata || {}), sourceTitle: tvInfo.showName });
     }
 
     const title = tvInfo?.episodeTitle || titleFromFilename(resolvedPath);
@@ -328,12 +342,17 @@ class MediaScanner {
     let metadata = {};
     if (!unchanged) {
       inspection = await this.inspectMedia(resolvedPath);
-      if (!existing?.metadata_locked && this.tmdb.configured) {
-        if (mediaType === 'movie') {
-          metadata = await this.tmdb.enrichMovie(title).catch(() => null) || {};
-        } else if (show?.tmdb_id) {
-          metadata = await this.tmdb.enrichEpisode(show.tmdb_id, tvInfo.season, tvInfo.episode).catch(() => null) || {};
-        }
+    }
+    const needsMetadata = !existing?.metadata_locked && (
+      mediaType === 'movie'
+        ? (!existing?.tmdb_id || !existing?.poster_path)
+        : (!existing?.tmdb_id || !existing?.overview || !existing?.backdrop_path)
+    );
+    if ((!unchanged || needsMetadata) && this.tmdb.configured) {
+      if (mediaType === 'movie') {
+        metadata = await this.tmdb.enrichMovie(path.basename(resolvedPath)).catch(() => null) || {};
+      } else if (show?.tmdb_id) {
+        metadata = await this.tmdb.enrichEpisode(show.tmdb_id, tvInfo.season, tvInfo.episode).catch(() => null) || {};
       }
     }
 
@@ -345,7 +364,8 @@ class MediaScanner {
       relativePath: path.relative(rootPath, resolvedPath),
       filename: path.basename(resolvedPath),
       title: metadata.title || title,
-      normalizedTitle: normalizeComparable(metadata.title || title),
+      sourceTitle: title,
+      normalizedTitle: normalizeComparable(title),
       seasonNumber: tvInfo?.season || null,
       episodeNumber: tvInfo?.episode || null,
       episodeEndNumber: tvInfo?.episodeEnd || null,
@@ -356,7 +376,8 @@ class MediaScanner {
     }, existing);
     replaceSubtitles(saved.id, findMatchingSubtitles(resolvedPath, subtitleFiles, mediaType, rootPath));
 
-    if (unchanged) this.status.unchanged += 1;
+    if (unchanged && Object.keys(metadata).length) this.status.updated += 1;
+    else if (unchanged) this.status.unchanged += 1;
     else if (existing) this.status.updated += 1;
     else this.status.new += 1;
   }

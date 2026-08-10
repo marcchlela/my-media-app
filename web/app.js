@@ -4,6 +4,9 @@ const SUBTITLE_SIZE_KEY = 'myMediaSubtitleFontSize';
 const WATCH_COMPLETE_THRESHOLD_PERCENT = 92;
 const SEARCH_RENDER_DEBOUNCE_MS = 120;
 const MIN_RELIABLE_EPISODE_VOTES = 5;
+const FEATURED_ROTATION_MS = 8500;
+const FEATURED_AUTOPLAY_KEY = 'featuredCarouselAutoplay';
+const CINEMA_SOUND_KEY = 'cinemaSoundsEnabled';
 
 const content = document.getElementById('content');
 const statusText = document.getElementById('statusText');
@@ -45,6 +48,9 @@ let allowSignup = true;
 let currentPlayerItem = null;
 let playerControlsHideTimer = null;
 let playerClickToggleTimer = null;
+let featuredCarouselTimer = null;
+let cinemaTransitionActive = false;
+let cinemaAudioContext = null;
 
 const movieDetailCache = new Map();
 const showDetailCache = new Map();
@@ -119,6 +125,101 @@ function setTheme(theme) {
 
 function initTheme() {
   setTheme(localStorage.getItem(THEME_KEY) || 'dark');
+}
+
+function prefersReducedMotion() {
+  return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+function getFeaturedAutoplayEnabled() {
+  return localStorage.getItem(FEATURED_AUTOPLAY_KEY) !== '0';
+}
+
+function setFeaturedAutoplayEnabled(enabled) {
+  localStorage.setItem(FEATURED_AUTOPLAY_KEY, enabled ? '1' : '0');
+}
+
+function getCinemaSoundsEnabled() {
+  return localStorage.getItem(CINEMA_SOUND_KEY) === '1';
+}
+
+function setCinemaSoundsEnabled(enabled) {
+  localStorage.setItem(CINEMA_SOUND_KEY, enabled ? '1' : '0');
+}
+
+function playCinemaSound(type = 'click') {
+  if (!getCinemaSoundsEnabled()) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  cinemaAudioContext = cinemaAudioContext || new AudioContextClass();
+  const context = cinemaAudioContext;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = type === 'projector' ? 'sawtooth' : 'sine';
+  oscillator.frequency.setValueAtTime(type === 'projector' ? 95 : 210, context.currentTime);
+  oscillator.frequency.exponentialRampToValueAtTime(80, context.currentTime + 0.12);
+  gain.gain.setValueAtTime(type === 'projector' ? 0.025 : 0.04, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.14);
+  oscillator.connect(gain).connect(context.destination);
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.15);
+}
+
+function ensureCinemaTransition() {
+  let overlay = document.getElementById('cinemaTransition');
+  if (overlay) return overlay;
+  overlay = document.createElement('div');
+  overlay.id = 'cinemaTransition';
+  overlay.className = 'cinema-transition';
+  overlay.innerHTML = `
+    <div class="cinema-curtain cinema-curtain-left"></div>
+    <div class="cinema-curtain cinema-curtain-right"></div>
+    <div class="cinema-transition-center"><span class="cinema-projector-beam"></span><span>MyFlix</span></div>
+  `;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+async function runCinemaTransition(action, mode = 'page') {
+  if (prefersReducedMotion() || cinemaTransitionActive) return action();
+  cinemaTransitionActive = true;
+  const overlay = ensureCinemaTransition();
+  overlay.className = `cinema-transition mode-${mode} is-active is-closing`;
+  playCinemaSound(mode === 'playback' ? 'projector' : 'click');
+  try {
+    await new Promise((resolve) => setTimeout(resolve, mode === 'playback' ? 500 : 260));
+    await action();
+    overlay.classList.remove('is-closing');
+    overlay.classList.add('is-opening');
+    await new Promise((resolve) => setTimeout(resolve, mode === 'playback' ? 620 : 340));
+  } finally {
+    overlay.className = 'cinema-transition';
+    cinemaTransitionActive = false;
+  }
+}
+
+function createImageFallback(container, title, className = 'poster-fallback') {
+  const fallback = document.createElement('div');
+  fallback.className = className;
+  const monogram = String(title || 'MyFlix').split(/\s+/).map((part) => part[0]).join('').slice(0, 3);
+  const mark = document.createElement('span');
+  mark.setAttribute('aria-hidden', 'true');
+  mark.textContent = monogram || 'M';
+  const label = document.createElement('strong');
+  label.textContent = title || 'Untitled';
+  fallback.append(mark, label);
+  container.appendChild(fallback);
+  return fallback;
+}
+
+function bindImageFallback(image, fallback, source) {
+  const showFallback = () => {
+    image.classList.add('image-unavailable');
+    fallback.classList.add('is-visible');
+  };
+  image.addEventListener('error', showFallback, { once: true });
+  if (source) image.src = source;
+  else showFallback();
 }
 
 function getSubtitleFontSize() {
@@ -474,7 +575,7 @@ function createRatingStars(ratingOutOf10, withNumber = true) {
   return container;
 }
 
-function createPeopleGroup(label, names = [], fallback = 'Unknown') {
+function createPeopleGroup(label, people = [], fallback = 'Unknown') {
   const wrap = document.createElement('div');
   wrap.className = 'details-people-group';
 
@@ -485,18 +586,29 @@ function createPeopleGroup(label, names = [], fallback = 'Unknown') {
   const chips = document.createElement('div');
   chips.className = 'details-people-chips';
 
-  const values = Array.isArray(names)
-    ? names.map((name) => String(name || '').trim()).filter(Boolean)
+  const values = Array.isArray(people)
+    ? people.map((person) => typeof person === 'string' ? { name: person } : person).filter((person) => person?.name)
     : [];
-  const finalValues = values.length ? values : [fallback];
+  const finalValues = values.length ? values : [{ name: fallback }];
 
-  finalValues.forEach((value) => {
+  finalValues.forEach((person) => {
     const chip = document.createElement('span');
     chip.className = 'details-person-chip';
-    if (value === fallback) {
+    if (person.name === fallback) {
       chip.classList.add('is-fallback');
     }
-    chip.textContent = value;
+    if (person.profile_path) {
+      const portrait = document.createElement('img');
+      portrait.className = 'details-person-portrait';
+      portrait.src = `https://image.tmdb.org/t/p/w185${person.profile_path}`;
+      portrait.alt = '';
+      portrait.loading = 'lazy';
+      chip.classList.add('has-portrait');
+      chip.appendChild(portrait);
+    }
+    const name = document.createElement('span');
+    name.textContent = person.name;
+    chip.appendChild(name);
     chips.appendChild(chip);
   });
 
@@ -529,6 +641,7 @@ function getShowGroups() {
         releaseDate: item.releaseDate || null,
         rating: Number.isFinite(item.rating) ? item.rating : null,
         runtime: Number.isFinite(item.runtime) ? item.runtime : null,
+        metadataLocked: !!item.metadataLocked,
         genreNames: [],
         episodes: [],
       });
@@ -670,10 +783,21 @@ function matchesSearch(strings) {
   return strings.some((value) => String(value || '').toLowerCase().includes(q));
 }
 
-function createCard({ title, subtitle, poster, onClick, hasCc = false }) {
+function createCard({ title, subtitle, poster, onClick, hasCc = false, badges = [] }) {
   const card = document.createElement('article');
-  card.className = 'card';
-  card.addEventListener('click', onClick);
+  card.className = 'card electric-media-card';
+  card.tabIndex = 0;
+  card.setAttribute('role', 'button');
+  const open = () => runCinemaTransition(onClick, 'page');
+  card.addEventListener('click', open);
+  card.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    open();
+  });
+
+  const light = document.createElement('span');
+  light.className = 'card-picture-light';
 
   const posterWrap = document.createElement('div');
   posterWrap.className = 'card-poster-wrap';
@@ -682,12 +806,19 @@ function createCard({ title, subtitle, poster, onClick, hasCc = false }) {
   img.className = 'poster';
   img.loading = 'lazy';
   img.alt = title || 'Poster';
-  img.src = poster || '';
+  const fallback = createImageFallback(posterWrap, title);
+  bindImageFallback(img, fallback, poster);
 
   if (hasCc) {
     const badge = document.createElement('span');
     badge.className = 'cc-badge';
     badge.textContent = 'CC';
+    posterWrap.appendChild(badge);
+  }
+  for (const value of badges) {
+    const badge = document.createElement('span');
+    badge.className = 'quality-badge';
+    badge.textContent = value;
     posterWrap.appendChild(badge);
   }
 
@@ -704,7 +835,8 @@ function createCard({ title, subtitle, poster, onClick, hasCc = false }) {
 
   meta.appendChild(titleNode);
   meta.appendChild(subNode);
-  posterWrap.appendChild(img);
+  posterWrap.insertBefore(img, posterWrap.firstChild);
+  card.appendChild(light);
   card.appendChild(posterWrap);
   card.appendChild(meta);
   return card;
@@ -722,11 +854,9 @@ function createContinueCard(entry) {
   const card = document.createElement('article');
   card.className = 'card continue-card continue-card-landscape';
   card.addEventListener('click', () => {
-    if (entry.type === 'movie') {
-      openMovieDetails(entry.item);
-      return;
-    }
-    openShowDetails(entry.group);
+    runCinemaTransition(() => (
+      entry.type === 'movie' ? openMovieDetails(entry.item) : openShowDetails(entry.group)
+    ), 'page');
   });
 
   const media = document.createElement('div');
@@ -736,7 +866,8 @@ function createContinueCard(entry) {
   img.className = 'continue-image';
   img.loading = 'lazy';
   img.alt = entry.title || 'Continue watching';
-  img.src = getContinueImageSrc(entry);
+  const fallback = createImageFallback(media, entry.title, 'continue-fallback');
+  bindImageFallback(img, fallback, getContinueImageSrc(entry));
   media.appendChild(img);
 
   if (entry.hasCc) {
@@ -761,7 +892,14 @@ function createContinueCard(entry) {
     overlay.appendChild(subtitleNode);
   }
 
-  overlay.appendChild(createContinueProgress(entry.percent));
+  const progressRow = document.createElement('div');
+  progressRow.className = 'continue-progress-row';
+  progressRow.appendChild(createContinueProgress(entry.percent));
+  const percentage = document.createElement('span');
+  percentage.className = 'continue-progress-percent';
+  percentage.textContent = `${Math.round(entry.percent || 0)}%`;
+  progressRow.appendChild(percentage);
+  overlay.appendChild(progressRow);
   media.appendChild(overlay);
   card.appendChild(media);
   return card;
@@ -940,24 +1078,189 @@ function getContinueWatchingEntries() {
   return entries.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+function createShelf(titleText, body, options = {}) {
+  const shelf = document.createElement('section');
+  shelf.className = `home-shelf${options.featured ? ' featured-shelf' : ''}`;
+  const header = document.createElement('div');
+  header.className = 'home-shelf-header';
+  const title = document.createElement('h2');
+  title.className = 'section-title';
+  title.textContent = titleText;
+  const actions = document.createElement('div');
+  actions.className = 'home-shelf-actions';
+  if (options.view) {
+    const seeAll = document.createElement('button');
+    seeAll.className = 'home-see-all';
+    seeAll.textContent = `See All ${titleText}`;
+    seeAll.addEventListener('click', () => {
+      currentView = options.view;
+      detailState = null;
+      renderCurrentView();
+    });
+    actions.appendChild(seeAll);
+  }
+  if (options.scrollable) {
+    for (const [label, direction] of [['Previous', -1], ['Next', 1]]) {
+      const button = document.createElement('button');
+      button.className = 'home-rail-btn';
+      button.setAttribute('aria-label', `${label} ${titleText}`);
+      button.textContent = direction < 0 ? '\u2039' : '\u203a';
+      button.addEventListener('click', () => {
+        body.scrollBy({ left: direction * Math.max(320, body.clientWidth * 0.8), behavior: 'smooth' });
+      });
+      actions.appendChild(button);
+    }
+  }
+  header.append(title, actions);
+  shelf.append(header, body);
+  return shelf;
+}
+
+function getFeaturedEntries(movies, shows) {
+  const entries = movies.map((item) => ({
+    type: 'movie',
+    title: item.title || item.name || 'Movie',
+    poster: item.posterPath ? `${TMDB_IMG}${item.posterPath}` : '',
+    description: item.overview || 'A featured presentation from your private collection.',
+    meta: [String(item.releaseDate || '').slice(0, 4), ...(item.genreNames || []).slice(0, 2), item.runtime ? `${item.runtime} min` : '']
+      .filter(Boolean).join('  /  '),
+    score: Number(item.rating) || 0,
+    open: () => openMovieDetails(item),
+    play: () => openPlayer(item),
+  }));
+  for (const group of shows) {
+    const continueState = getShowContinueState(group);
+    entries.push({
+      type: 'show',
+      title: group.name || 'TV Show',
+      poster: group.posterPath ? `${TMDB_IMG}${group.posterPath}` : '',
+      description: group.overview || 'A featured series from your private collection.',
+      meta: [String(group.releaseDate || '').slice(0, 4), ...(group.genreNames || []).slice(0, 2), `${new Set(group.episodes.map((episode) => episode.episode?.season)).size} season(s)`]
+        .filter(Boolean).join('  /  '),
+      score: Number(group.rating) || 0,
+      open: () => openShowDetails(group),
+      play: () => openPlayer(continueState?.episode || group.episodes[0]),
+    });
+  }
+  return entries.sort((a, b) => b.score - a.score).slice(0, 12);
+}
+
+function renderFeaturedHero(movies, shows) {
+  const entries = getFeaturedEntries(movies, shows);
+  const wrap = document.createElement('div');
+  wrap.className = 'featured-hero-wrap';
+  if (!entries.length) return wrap;
+  const hero = document.createElement('div');
+  hero.className = 'electric-featured';
+  const ticket = document.createElement('button');
+  ticket.className = 'electric-featured-note';
+  ticket.type = 'button';
+  const posters = document.createElement('div');
+  posters.className = 'electric-featured-posters';
+  const nav = document.createElement('div');
+  nav.className = 'featured-carousel-nav';
+  const previous = document.createElement('button');
+  previous.className = 'featured-carousel-arrow';
+  previous.textContent = '\u2039';
+  const dots = document.createElement('div');
+  dots.className = 'featured-carousel-dots';
+  const next = document.createElement('button');
+  next.className = 'featured-carousel-arrow';
+  next.textContent = '\u203a';
+  nav.append(previous, dots, next);
+  hero.append(ticket, posters, nav);
+  wrap.appendChild(hero);
+  let activeIndex = 0;
+
+  const createPoster = (entry, isMain) => {
+    const button = document.createElement('button');
+    button.className = `electric-featured-poster${isMain ? ' is-main' : ''}`;
+    button.type = 'button';
+    const light = document.createElement('span');
+    light.className = 'electric-featured-light';
+    const frame = document.createElement('span');
+    frame.className = 'electric-featured-frame';
+    const image = document.createElement('img');
+    image.className = 'electric-featured-image';
+    image.alt = entry.title;
+    const fallback = createImageFallback(frame, entry.title, 'featured-poster-fallback');
+    bindImageFallback(image, fallback, entry.poster);
+    frame.insertBefore(image, frame.firstChild);
+    const caption = document.createElement('span');
+    caption.className = 'electric-featured-caption';
+    const name = document.createElement('strong');
+    name.textContent = entry.title;
+    caption.appendChild(name);
+    button.append(light, frame, caption);
+    button.addEventListener('click', () => runCinemaTransition(entry.open, 'page'));
+    return button;
+  };
+
+  const schedule = () => {
+    clearTimeout(featuredCarouselTimer);
+    if (!getFeaturedAutoplayEnabled() || entries.length < 2 || !hero.isConnected) return;
+    featuredCarouselTimer = setTimeout(() => {
+      update(activeIndex + 1);
+      schedule();
+    }, FEATURED_ROTATION_MS);
+  };
+
+  const update = (index) => {
+    activeIndex = (index + entries.length) % entries.length;
+    const entry = entries[activeIndex];
+    ticket.replaceChildren();
+    const eyebrow = document.createElement('small');
+    eyebrow.textContent = 'Featured Screening';
+    const title = document.createElement('h3');
+    title.textContent = entry.title;
+    const meta = document.createElement('p');
+    meta.className = 'electric-featured-meta';
+    meta.textContent = entry.meta;
+    const description = document.createElement('p');
+    description.className = 'electric-featured-description';
+    description.textContent = entry.description;
+    const play = document.createElement('span');
+    play.className = 'electric-featured-play';
+    play.innerHTML = `<span class="electric-featured-play-icon">${getPlayerIconSvg('play')}</span><i></i><span>Play Now</span>`;
+    play.addEventListener('click', (event) => {
+      event.stopPropagation();
+      runCinemaTransition(entry.play, 'playback');
+    });
+    ticket.append(eyebrow, title, meta, description, play);
+    ticket.onclick = () => runCinemaTransition(entry.open, 'page');
+    posters.replaceChildren(createPoster(entry, true));
+    if (entries.length > 1) posters.appendChild(createPoster(entries[(activeIndex + 1) % entries.length], false));
+    dots.replaceChildren();
+    entries.forEach((candidate, candidateIndex) => {
+      const dot = document.createElement('button');
+      dot.className = `featured-carousel-dot${candidateIndex === activeIndex ? ' active' : ''}`;
+      dot.setAttribute('aria-label', `Show ${candidate.title}`);
+      dot.addEventListener('click', () => { update(candidateIndex); schedule(); });
+      dots.appendChild(dot);
+    });
+  };
+  previous.addEventListener('click', () => { update(activeIndex - 1); schedule(); });
+  next.addEventListener('click', () => { update(activeIndex + 1); schedule(); });
+  hero.addEventListener('mouseenter', () => clearTimeout(featuredCarouselTimer));
+  hero.addEventListener('mouseleave', schedule);
+  update(0);
+  schedule();
+  return wrap;
+}
+
 function renderContinueWatching() {
   if (!currentUser) return;
   const entries = getContinueWatchingEntries();
   if (!entries.length) return;
 
-  const title = document.createElement('h2');
-  title.className = 'section-title';
-  title.textContent = 'Continue Watching';
-  content.appendChild(title);
-
   const row = document.createElement('section');
-  row.className = 'continue-row';
+  row.className = 'continue-row home-horizontal-rail';
 
   entries.forEach((entry) => {
     row.appendChild(createContinueCard(entry));
   });
 
-  content.appendChild(row);
+  content.appendChild(createShelf('Continue Watching', row, { scrollable: true }));
 }
 
 function renderHome() {
@@ -977,20 +1280,18 @@ function renderHome() {
   movies = applySortToMovies(movies);
   shows = applySortToShows(shows);
 
+  content.appendChild(createShelf('Now Showing', renderFeaturedHero(movies, shows), { featured: true }));
   renderContinueWatching();
 
-  const movieTitle = document.createElement('h2');
-  movieTitle.className = 'section-title';
-  movieTitle.textContent = 'Movies';
-  content.appendChild(movieTitle);
-
   const movieGrid = createGrid();
+  movieGrid.classList.add('home-horizontal-rail');
   movies.forEach((item) => {
     const card = createCard({
       title: item.title || item.name,
       subtitle: 'Movie',
       poster: item.posterPath ? `${TMDB_IMG}${item.posterPath}` : '',
       hasCc: Array.isArray(item.subtitles) && item.subtitles.length > 0,
+      badges: item.qualityTags || [],
       onClick: () => openMovieDetails(item),
     });
     const percent = getWatchPercent(item);
@@ -999,14 +1300,10 @@ function renderHome() {
     }
     movieGrid.appendChild(card);
   });
-  content.appendChild(movieGrid);
-
-  const showTitle = document.createElement('h2');
-  showTitle.className = 'section-title';
-  showTitle.textContent = 'TV Shows';
-  content.appendChild(showTitle);
+  content.appendChild(createShelf('Movies', movieGrid, { view: 'movies', scrollable: true }));
 
   const showGrid = createGrid();
+  showGrid.classList.add('home-horizontal-rail');
   shows.forEach((group) => {
     showGrid.appendChild(createCard({
       title: group.name,
@@ -1016,7 +1313,7 @@ function renderHome() {
       onClick: () => openShowDetails(group),
     }));
   });
-  content.appendChild(showGrid);
+  content.appendChild(createShelf('TV Shows', showGrid, { view: 'shows', scrollable: true }));
 
   statusText.textContent = `${movies.length} movie(s), ${shows.length} show(s)`;
 }
@@ -1037,6 +1334,7 @@ function renderMovies() {
       subtitle: 'Movie',
       poster: item.posterPath ? `${TMDB_IMG}${item.posterPath}` : '',
       hasCc: Array.isArray(item.subtitles) && item.subtitles.length > 0,
+      badges: item.qualityTags || [],
       onClick: () => openMovieDetails(item),
     });
     const percent = getWatchPercent(item);
@@ -1117,6 +1415,55 @@ function buildThemeToggle() {
   return row;
 }
 
+function buildPreferenceToggle(labelText, checked, onChange) {
+  const row = document.createElement('label');
+  row.className = 'settings-preference-row';
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = checked;
+  const slider = document.createElement('span');
+  slider.className = 'brass-toggle';
+  input.addEventListener('change', () => onChange(input.checked));
+  row.append(label, input, slider);
+  return row;
+}
+
+function renderSettings() {
+  content.innerHTML = '';
+  statusText.textContent = 'Screening room preferences';
+  const page = document.createElement('section');
+  page.className = 'settings-lounge-page';
+  const heading = document.createElement('div');
+  heading.className = 'lounge-page-heading';
+  heading.innerHTML = '<small>Private Screening Controls</small><h2>Settings</h2><p>Adjust the room without changing your library or server.</p>';
+  const panel = document.createElement('div');
+  panel.className = 'settings-card cinema-control-panel';
+  panel.appendChild(buildThemeToggle());
+  panel.appendChild(buildPreferenceToggle('Automatic Now Showing rotation', getFeaturedAutoplayEnabled(), setFeaturedAutoplayEnabled));
+  panel.appendChild(buildPreferenceToggle('Quiet cinema sounds', getCinemaSoundsEnabled(), setCinemaSoundsEnabled));
+
+  const subtitleRow = document.createElement('label');
+  subtitleRow.className = 'settings-preference-row';
+  const subtitleLabel = document.createElement('span');
+  subtitleLabel.textContent = 'Subtitle size';
+  const subtitleSelect = document.createElement('select');
+  subtitleSelect.className = 'mobile-select';
+  [['16px', 'Small'], ['20px', 'Medium'], ['24px', 'Large']].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    subtitleSelect.appendChild(option);
+  });
+  subtitleSelect.value = getSubtitleFontSize();
+  subtitleSelect.addEventListener('change', () => setSubtitleFontSize(subtitleSelect.value));
+  subtitleRow.append(subtitleLabel, subtitleSelect);
+  panel.appendChild(subtitleRow);
+  page.append(heading, panel);
+  content.appendChild(page);
+}
+
 function getUserDisplayName() {
   if (!currentUser) return '';
   return currentUser.fullName || `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || currentUser.email || '';
@@ -1137,13 +1484,16 @@ function renderAccount() {
   content.innerHTML = '';
   statusText.textContent = currentUser ? 'Your account' : 'Sign in to sync progress';
 
+  const pageHeading = document.createElement('div');
+  pageHeading.className = 'lounge-page-heading';
+  pageHeading.innerHTML = '<small>Electric Lounge Membership</small><h2>Account</h2><p>Your private collection, viewing progress and membership controls.</p>';
+  content.appendChild(pageHeading);
+
   const card = document.createElement('div');
-  card.className = 'settings-card account-card';
-  card.appendChild(buildThemeToggle());
+  card.className = 'settings-card account-card membership-card';
 
   const divider = document.createElement('div');
   divider.className = 'account-divider';
-  card.appendChild(divider);
 
   if (!currentUser) {
     const heading = document.createElement('h2');
@@ -1198,6 +1548,7 @@ function renderAccount() {
     actions.appendChild(logoutBtn);
     card.appendChild(heading);
     card.appendChild(email);
+    card.appendChild(divider);
     card.appendChild(copy);
     card.appendChild(actions);
   }
@@ -1216,8 +1567,8 @@ function renderAccount() {
   const favoriteShows = getShowGroups().filter((group) => isShowFavorite(group));
 
   const heading = document.createElement('h2');
-  heading.className = 'section-title';
-  heading.textContent = 'Favorites';
+  heading.className = 'section-title account-collection-title';
+  heading.textContent = 'Your Framed Collection';
   content.appendChild(heading);
 
   if (!favoriteMovies.length && !favoriteShows.length) {
@@ -1229,6 +1580,7 @@ function renderAccount() {
   }
 
   const grid = createGrid();
+  grid.classList.add('account-favorites-grid');
   favoriteMovies.forEach((item) => {
     grid.appendChild(createCard({
       title: item.title || item.name,
@@ -1254,53 +1606,99 @@ function renderAccount() {
 
 function createAdminScanPanel() {
   const panel = document.createElement('div');
-  panel.className = 'settings-card account-card';
+  panel.className = 'settings-card account-card cinema-control-panel library-management-panel';
   const heading = document.createElement('h2');
   heading.className = 'account-title';
-  heading.textContent = 'Server Library';
+  heading.textContent = 'Library Management';
   const copy = document.createElement('p');
   copy.className = 'account-copy';
-  copy.textContent = 'Scan the configured server folders for newly added or reconnected media.';
+  copy.textContent = 'Manage the server catalog without changing or writing to your media files.';
+  const stats = document.createElement('div');
+  stats.className = 'admin-stat-grid';
   const status = document.createElement('p');
   status.className = 'account-copy';
   status.textContent = 'Checking scan status...';
-  const button = document.createElement('button');
-  button.className = 'solid-btn';
-  button.textContent = 'Rescan Library';
+  const metadataStatus = document.createElement('p');
+  metadataStatus.className = 'account-copy';
+  metadataStatus.textContent = 'Checking metadata status...';
+  const actions = document.createElement('div');
+  actions.className = 'account-actions admin-library-actions';
+  const scanButton = document.createElement('button');
+  scanButton.className = 'solid-btn';
+  scanButton.textContent = 'Rescan Library';
+  const metadataButton = document.createElement('button');
+  metadataButton.className = 'ghost-btn';
+  metadataButton.textContent = 'Refresh Missing Metadata';
 
   const refreshStatus = async () => {
     try {
-      const result = await apiRequest('/api/admin/library/scan/status');
-      const scan = result?.status || {};
-      button.disabled = !!scan.running;
+      const result = await apiRequest('/api/admin/status');
+      const scan = result?.scan || {};
+      const metadata = result?.metadata || {};
+      const catalog = result?.catalog || {};
+      const sources = result?.mediaSources || [];
+      scanButton.disabled = !!scan.running;
+      metadataButton.disabled = !!metadata.running;
       status.textContent = scan.running
         ? `Scanning: ${scan.filesScanned || 0} files checked, ${scan.new || 0} new.`
         : `Last scan: ${scan.filesScanned || 0} checked, ${scan.new || 0} new, ${scan.updated || 0} updated, ${scan.unavailable || 0} unavailable.`;
-      return !!scan.running;
+      metadataStatus.textContent = metadata.running
+        ? `Metadata refresh: ${metadata.matched || 0} matched, ${metadata.unmatched || 0} unmatched.`
+        : `Last metadata refresh: ${metadata.matched || 0} matched, ${metadata.unmatched || 0} unmatched, ${metadata.failed || 0} failed.`;
+      stats.replaceChildren();
+      [
+        ['Movies', catalog.movies || 0],
+        ['Shows', catalog.shows || 0],
+        ['Episodes', catalog.episodes || 0],
+        ['Sources online', `${sources.filter((source) => source.available).length}/${sources.length}`],
+      ].forEach(([label, value]) => {
+        const stat = document.createElement('span');
+        stat.innerHTML = `<strong>${value}</strong><small>${label}</small>`;
+        stats.appendChild(stat);
+      });
+      return { scanRunning: !!scan.running, metadataRunning: !!metadata.running };
     } catch (err) {
-      status.textContent = 'Scan status is unavailable.';
-      button.disabled = false;
-      return false;
+      status.textContent = 'Server library status is unavailable.';
+      scanButton.disabled = false;
+      metadataButton.disabled = false;
+      return { scanRunning: false, metadataRunning: false };
     }
   };
 
-  button.addEventListener('click', async () => {
-    button.disabled = true;
+  const pollUntilIdle = async () => {
+    const running = await refreshStatus();
+    if ((running.scanRunning || running.metadataRunning) && panel.isConnected) {
+      setTimeout(pollUntilIdle, 1500);
+    } else if (panel.isConnected) {
+      await loadLibrary();
+    }
+  };
+
+  scanButton.addEventListener('click', async () => {
+    scanButton.disabled = true;
     status.textContent = 'Starting server scan...';
     try {
       await apiRequest('/api/admin/library/scan', { method: 'POST' });
-      const poll = async () => {
-        const running = await refreshStatus();
-        if (running && panel.isConnected) setTimeout(poll, 1500);
-        else if (panel.isConnected) await loadLibrary();
-      };
-      setTimeout(poll, 500);
+      setTimeout(pollUntilIdle, 500);
     } catch (err) {
       status.textContent = err.message || 'Could not start the scan.';
-      button.disabled = false;
+      scanButton.disabled = false;
     }
   });
-  panel.append(heading, copy, button, status);
+
+  metadataButton.addEventListener('click', async () => {
+    metadataButton.disabled = true;
+    metadataStatus.textContent = 'Starting metadata-only refresh...';
+    try {
+      await apiRequest('/api/admin/library/metadata/refresh', { method: 'POST' });
+      setTimeout(pollUntilIdle, 500);
+    } catch (err) {
+      metadataStatus.textContent = err.message || 'Could not start metadata refresh.';
+      metadataButton.disabled = false;
+    }
+  });
+  actions.append(scanButton, metadataButton);
+  panel.append(heading, copy, stats, actions, status, metadataStatus);
   refreshStatus();
   return panel;
 }
@@ -1723,6 +2121,168 @@ async function fetchEpisodeDetailsSummary(showId, episodeInfo, options = {}) {
   };
 }
 
+async function refreshDetailAfterMetadata(targetType, targetId) {
+  movieDetailCache.clear();
+  showDetailCache.clear();
+  episodeDetailCache.clear();
+  await loadLibrary({ render: false });
+  if (targetType === 'movie') {
+    const item = libraryItems.find((entry) => entry.id === targetId);
+    if (item) await openMovieDetails(item);
+    return;
+  }
+  const group = getShowGroups().find((entry) => entry.id === targetId || entry.key === `show:${targetId}`);
+  if (group) await openShowDetails(group);
+}
+
+function openMetadataFixDialog(targetType, target) {
+  const targetId = targetType === 'show' ? target.id : target.id;
+  const initialTitle = targetType === 'show' ? target.name : (target.title || target.name);
+  const overlay = document.createElement('div');
+  overlay.className = 'auth-overlay metadata-overlay';
+  const dialog = document.createElement('section');
+  dialog.className = 'metadata-dialog';
+  const header = document.createElement('div');
+  header.className = 'metadata-dialog-header';
+  const heading = document.createElement('div');
+  heading.innerHTML = `<small>TMDB Programme Desk</small><h2>Fix Metadata</h2>`;
+  const close = document.createElement('button');
+  close.className = 'ghost-btn';
+  close.textContent = 'Close';
+  close.addEventListener('click', () => overlay.remove());
+  header.append(heading, close);
+
+  const searchRow = document.createElement('form');
+  searchRow.className = 'metadata-search-row';
+  const input = document.createElement('input');
+  input.className = 'auth-input';
+  input.value = initialTitle || '';
+  input.placeholder = targetType === 'show' ? 'Search TV shows...' : 'Search movies...';
+  const searchButton = document.createElement('button');
+  searchButton.className = 'solid-btn';
+  searchButton.textContent = 'Search TMDB';
+  searchRow.append(input, searchButton);
+
+  const message = document.createElement('p');
+  message.className = 'metadata-dialog-message';
+  const results = document.createElement('div');
+  results.className = 'metadata-results';
+  const footer = document.createElement('div');
+  footer.className = 'metadata-dialog-footer';
+  const reset = document.createElement('button');
+  reset.className = 'ghost-btn';
+  reset.textContent = 'Clear Manual Match';
+  const retry = document.createElement('button');
+  retry.className = 'ghost-btn';
+  retry.textContent = 'Retry Automatic Match';
+  footer.append(reset, retry);
+
+  const setBusy = (busy, text = '') => {
+    searchButton.disabled = busy;
+    reset.disabled = busy;
+    retry.disabled = busy;
+    message.textContent = text;
+  };
+
+  const loadResults = async () => {
+    setBusy(true, 'Searching the TMDB catalogue...');
+    results.replaceChildren();
+    try {
+      const response = await apiGet('/api/admin/metadata/search', {
+        type: targetType,
+        id: targetId,
+        q: input.value.trim(),
+      });
+      const candidates = response?.results || [];
+      message.textContent = candidates.length
+        ? 'Choose the exact title. Your selection will be locked against automatic scans.'
+        : 'No candidates were found. Try a shorter title or include the release year.';
+      for (const candidate of candidates) {
+        const card = document.createElement('article');
+        card.className = 'metadata-result-card';
+        const posterWrap = document.createElement('div');
+        posterWrap.className = 'metadata-result-poster';
+        const image = document.createElement('img');
+        image.alt = candidate.title || 'TMDB poster';
+        const fallback = createImageFallback(posterWrap, candidate.title, 'poster-fallback compact');
+        bindImageFallback(image, fallback, candidate.posterPath ? `${TMDB_IMG}${candidate.posterPath}` : '');
+        posterWrap.insertBefore(image, posterWrap.firstChild);
+        const body = document.createElement('div');
+        body.className = 'metadata-result-body';
+        const title = document.createElement('h3');
+        title.textContent = candidate.title || 'Untitled';
+        const facts = document.createElement('p');
+        facts.textContent = [candidate.year, candidate.originalTitle && candidate.originalTitle !== candidate.title ? candidate.originalTitle : '', Number.isFinite(candidate.rating) ? `${candidate.rating.toFixed(1)}/10` : '']
+          .filter(Boolean).join('  /  ');
+        const overview = document.createElement('p');
+        overview.textContent = candidate.overview || 'No synopsis available.';
+        const choose = document.createElement('button');
+        choose.className = 'solid-btn';
+        choose.textContent = 'Use This Match';
+        choose.addEventListener('click', async () => {
+          setBusy(true, `Saving ${candidate.title}...`);
+          try {
+            await apiRequest('/api/admin/metadata/match', {
+              method: 'POST',
+              body: { targetType, targetId, tmdbId: candidate.id },
+            });
+            overlay.remove();
+            await refreshDetailAfterMetadata(targetType, targetId);
+          } catch (err) {
+            setBusy(false, err.message || 'Could not save this match.');
+          }
+        });
+        body.append(title, facts, overview, choose);
+        card.append(posterWrap, body);
+        results.appendChild(card);
+      }
+    } catch (err) {
+      message.textContent = err.message || 'TMDB search failed.';
+    } finally {
+      searchButton.disabled = false;
+      reset.disabled = false;
+      retry.disabled = false;
+    }
+  };
+
+  searchRow.addEventListener('submit', (event) => {
+    event.preventDefault();
+    loadResults();
+  });
+  reset.addEventListener('click', async () => {
+    setBusy(true, 'Clearing the manual match...');
+    try {
+      await apiRequest('/api/admin/metadata/match', { method: 'DELETE', body: { targetType, targetId } });
+      overlay.remove();
+      await refreshDetailAfterMetadata(targetType, targetId);
+    } catch (err) {
+      setBusy(false, err.message || 'Could not clear this match.');
+    }
+  });
+  retry.addEventListener('click', async () => {
+    setBusy(true, 'Trying the conservative automatic matcher...');
+    try {
+      const response = await apiRequest('/api/admin/metadata/retry', { method: 'POST', body: { targetType, targetId } });
+      if (!response.ok && response.state === 'unmatched') {
+        setBusy(false, 'No unambiguous automatic match was found. Choose one manually below.');
+        await loadResults();
+        return;
+      }
+      overlay.remove();
+      await refreshDetailAfterMetadata(targetType, targetId);
+    } catch (err) {
+      setBusy(false, err.message || 'Automatic matching failed.');
+    }
+  });
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) overlay.remove();
+  });
+  dialog.append(header, searchRow, message, results, footer);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+  loadResults();
+}
+
 function renderDetailHeader(title, onBack) {
   const actions = document.createElement('div');
   actions.className = 'actions';
@@ -1751,12 +2311,19 @@ function renderMovieDetailCard(item, meta) {
   content.appendChild(actions);
 
   const card = document.createElement('article');
-  card.className = 'detail-card';
+  card.className = 'detail-card electric-private-room';
+  const backdrop = item.backdropPath || meta?.details?.backdrop_path;
+  if (backdrop) card.style.setProperty('--detail-backdrop', `url("${buildBackdropUrl(backdrop, 1280)}")`);
+
+  const posterFrame = document.createElement('div');
+  posterFrame.className = 'detail-poster-frame';
 
   const img = document.createElement('img');
   img.className = 'detail-poster';
-  img.src = (item.posterPath || meta?.details?.poster_path) ? `${TMDB_IMG}${item.posterPath || meta?.details?.poster_path}` : '';
   img.alt = item.title || item.name || 'Poster';
+  const posterFallback = createImageFallback(posterFrame, item.title || item.name, 'poster-fallback detail-fallback');
+  bindImageFallback(img, posterFallback, (item.posterPath || meta?.details?.poster_path) ? `${TMDB_IMG}${item.posterPath || meta?.details?.poster_path}` : '');
+  posterFrame.insertBefore(img, posterFrame.firstChild);
 
   const body = document.createElement('div');
   body.className = 'detail-body';
@@ -1769,6 +2336,13 @@ function renderMovieDetailCard(item, meta) {
   title.textContent = meta?.details?.title || item.title || item.name || 'Movie';
   titleRow.appendChild(title);
 
+  if (item.metadataLocked) {
+    const lock = document.createElement('span');
+    lock.className = 'details-brass-badge';
+    lock.textContent = 'Manual Match';
+    titleRow.appendChild(lock);
+  }
+
   const rating = createRatingStars(meta?.details?.vote_average);
   if (rating) titleRow.appendChild(rating);
 
@@ -1778,11 +2352,11 @@ function renderMovieDetailCard(item, meta) {
   overview.className = 'detail-text';
   overview.textContent = meta?.details?.overview || 'No description available.';
 
-  const directorName = meta?.credits?.crew?.find((person) => person.job === 'Director')?.name;
+  const director = meta?.credits?.crew?.find((person) => person.job === 'Director');
   const runtime = meta?.details?.runtime;
   const genres = meta?.details?.genres?.map((g) => g.name).join(', ');
-  const cast = meta?.credits?.cast?.slice(0, 8).map((p) => p.name).filter(Boolean) || [];
-  const directorGroup = createPeopleGroup('Director', directorName ? [directorName] : []);
+  const cast = meta?.credits?.cast?.slice(0, 8) || [];
+  const directorGroup = createPeopleGroup('Director', director ? [director] : []);
 
   const runtimeLine = document.createElement('p');
   runtimeLine.className = 'detail-line';
@@ -1820,9 +2394,9 @@ function renderMovieDetailCard(item, meta) {
   metaGrid.appendChild(rightCard);
 
   const play = document.createElement('button');
-  play.className = 'solid-btn';
-  play.textContent = 'Play';
-  play.addEventListener('click', () => openPlayer(item));
+  play.className = 'solid-btn details-play-primary';
+  play.innerHTML = `${getPlayerIconSvg('play')}<span>Play</span>`;
+  play.addEventListener('click', () => runCinemaTransition(() => openPlayer(item), 'playback'));
 
   const trailer = document.createElement('button');
   trailer.className = 'ghost-btn';
@@ -1858,6 +2432,13 @@ function renderMovieDetailCard(item, meta) {
       }
     }));
   }
+  if (currentUser?.isAdmin) {
+    const fixMetadata = document.createElement('button');
+    fixMetadata.className = 'ghost-btn metadata-fix-btn';
+    fixMetadata.textContent = item.metadataLocked ? 'Change Match' : 'Fix Metadata';
+    fixMetadata.addEventListener('click', () => openMetadataFixDialog('movie', item));
+    actionRow.appendChild(fixMetadata);
+  }
 
   body.appendChild(titleRow);
   body.appendChild(overview);
@@ -1865,7 +2446,7 @@ function renderMovieDetailCard(item, meta) {
   body.appendChild(metaGrid);
   body.appendChild(actionRow);
 
-  card.appendChild(img);
+  card.appendChild(posterFrame);
   card.appendChild(body);
   content.appendChild(card);
 }
@@ -1881,12 +2462,19 @@ function renderShowDetailCard(group, meta) {
   content.appendChild(actions);
 
   const card = document.createElement('article');
-  card.className = 'detail-card';
+  card.className = 'detail-card electric-private-room';
+  const backdrop = group.backdropPath || meta?.details?.backdrop_path;
+  if (backdrop) card.style.setProperty('--detail-backdrop', `url("${buildBackdropUrl(backdrop, 1280)}")`);
+
+  const posterFrame = document.createElement('div');
+  posterFrame.className = 'detail-poster-frame';
 
   const img = document.createElement('img');
   img.className = 'detail-poster';
-  img.src = (group.posterPath || meta?.details?.poster_path) ? `${TMDB_IMG}${group.posterPath || meta?.details?.poster_path}` : '';
   img.alt = group.name || 'Show poster';
+  const posterFallback = createImageFallback(posterFrame, group.name, 'poster-fallback detail-fallback');
+  bindImageFallback(img, posterFallback, (group.posterPath || meta?.details?.poster_path) ? `${TMDB_IMG}${group.posterPath || meta?.details?.poster_path}` : '');
+  posterFrame.insertBefore(img, posterFrame.firstChild);
 
   const body = document.createElement('div');
   body.className = 'detail-body';
@@ -1899,6 +2487,13 @@ function renderShowDetailCard(group, meta) {
   title.textContent = meta?.details?.name || group.name || 'TV Show';
   titleRow.appendChild(title);
 
+  if (group.metadataLocked) {
+    const lock = document.createElement('span');
+    lock.className = 'details-brass-badge';
+    lock.textContent = 'Manual Match';
+    titleRow.appendChild(lock);
+  }
+
   const rating = createRatingStars(meta?.details?.vote_average);
   if (rating) titleRow.appendChild(rating);
 
@@ -1908,11 +2503,11 @@ function renderShowDetailCard(group, meta) {
   overview.className = 'detail-text';
   overview.textContent = meta?.details?.overview || 'No description available.';
 
-  const directorName =
-    meta?.credits?.crew?.find((person) => person.job === 'Director')?.name
-    || meta?.credits?.crew?.find((person) => person.department === 'Directing')?.name;
-  const cast = meta?.credits?.cast?.slice(0, 8).map((p) => p.name).filter(Boolean) || [];
-  const directorGroup = createPeopleGroup('Director', directorName ? [directorName] : []);
+  const director =
+    meta?.credits?.crew?.find((person) => person.job === 'Director')
+    || meta?.credits?.crew?.find((person) => person.department === 'Directing');
+  const cast = meta?.credits?.cast?.slice(0, 8) || [];
+  const directorGroup = createPeopleGroup('Director', director ? [director] : []);
   const castGroup = createPeopleGroup('Cast', cast);
   const genres = meta?.details?.genres?.map((g) => g.name).join(', ');
   const seasonCount = meta?.details?.number_of_seasons;
@@ -1965,6 +2560,13 @@ function renderShowDetailCard(group, meta) {
       }
     }));
   }
+  if (currentUser?.isAdmin) {
+    const fixMetadata = document.createElement('button');
+    fixMetadata.className = 'ghost-btn metadata-fix-btn';
+    fixMetadata.textContent = group.metadataLocked ? 'Change Match' : 'Fix Metadata';
+    fixMetadata.addEventListener('click', () => openMetadataFixDialog('show', group));
+    actionRow.appendChild(fixMetadata);
+  }
 
   body.appendChild(titleRow);
   body.appendChild(overview);
@@ -1974,7 +2576,7 @@ function renderShowDetailCard(group, meta) {
     body.appendChild(actionRow);
   }
 
-  card.appendChild(img);
+  card.appendChild(posterFrame);
   card.appendChild(body);
   content.appendChild(card);
 
@@ -2071,8 +2673,8 @@ function renderShowDetailCard(group, meta) {
 
       const play = document.createElement('button');
       play.className = 'episode-play';
-      play.textContent = 'Play';
-      play.addEventListener('click', () => openPlayer(episodeView));
+      play.innerHTML = `${getPlayerIconSvg('play')}<span>Play</span>`;
+      play.addEventListener('click', () => runCinemaTransition(() => openPlayer(episodeView), 'playback'));
 
       left.appendChild(label);
       left.appendChild(overview);
@@ -2184,7 +2786,7 @@ function updateNavActive() {
 }
 
 function updateSearchVisibility() {
-  const hide = currentView === 'account' || !!detailState;
+  const hide = currentView === 'account' || currentView === 'settings' || !!detailState;
   searchInput.style.display = hide ? 'none' : '';
   if (mobileFiltersWrap) {
     mobileFiltersWrap.style.display = hide ? 'none' : '';
@@ -2217,6 +2819,10 @@ function renderCurrentView() {
   }
   if (currentView === 'shows') {
     renderShows();
+    return;
+  }
+  if (currentView === 'settings') {
+    renderSettings();
     return;
   }
   renderAccount();

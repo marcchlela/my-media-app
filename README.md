@@ -94,6 +94,7 @@ Subtitle matching considers same-directory names, nearby `Subtitles` folders, no
 - Startup scanning is controlled by `SCAN_ON_STARTUP`.
 - Administrators can start and monitor scans from web/mobile Account or Electron Settings.
 - New and changed files are inspected; unchanged size/mtime entries are not re-probed.
+- Unchanged entries that are missing TMDB data can be enriched without running `ffprobe` again.
 - Missing files are marked unavailable, never automatically deleted.
 - If a configured root is missing or unexpectedly empty, the scan fails safely and preserves its catalog.
 - Reconnect the USB and rescan to restore availability.
@@ -113,7 +114,13 @@ The media USB is mounted read-only. MyFlix never renames, deletes, or writes vid
 
 ## TMDB
 
-The library works without TMDB. When configured, only exact, unambiguous automatic matches are accepted and results are stored in SQLite. Ambiguous media remains usable with filename-derived metadata.
+The library works without TMDB. When configured, automatic matching uses cleaned titles, optional filename years, title similarity, original titles, and an ambiguity margin. Strong matches are stored in SQLite; uncertain results remain unmatched instead of accepting the first search result.
+
+Administrators can use **Fix Metadata** from a movie or show details page to search TMDB, inspect candidate posters/titles/years, and lock the correct match. **Clear Manual Match** restores filename-derived metadata, while **Retry Automatic Match** runs the conservative matcher again. Correcting a show also refreshes metadata for its associated episodes.
+
+The Account page's **Library Management** panel provides **Refresh Missing Metadata**. This background job only targets catalog rows missing a TMDB match or poster. It does not scan video contents, run `ffprobe`, or modify media files.
+
+Catalog schema version 4 adds private filename-derived source titles used by reset and matching. The migration is additive and preserves media IDs, accounts, progress, favorites, poster overrides, and existing metadata.
 
 ## Backups and restore
 

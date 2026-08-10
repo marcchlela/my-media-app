@@ -10,10 +10,11 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts=false \
     && npm cache clean --force
 
-COPY account-store.js env-config.js media-scanner.js media-store.js media-utils.js ./
+COPY account-store.js env-config.js media-scanner.js media-store.js media-utils.js metadata-manager.js ./
 COPY server.js streaming.js tmdb-service.js ./
 COPY web ./web
 COPY mobile ./mobile
+COPY myflix-electric/assets/generated-3d/*-web.webp ./myflix-electric/assets/generated-3d/
 
 RUN mkdir -p /data/cache/subtitles \
     && chown -R node:node /data

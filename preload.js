@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('api', {
   scanMissingLibraryItems: (items) => ipcRenderer.invoke('library:scan-missing', items),
   scanServerLibrary: () => ipcRenderer.invoke('server:library-scan'),
   getServerLibraryScanStatus: () => ipcRenderer.invoke('server:library-scan-status'),
+  refreshServerMetadata: () => ipcRenderer.invoke('server:metadata-refresh'),
+  getServerMetadataRefreshStatus: () => ipcRenderer.invoke('server:metadata-refresh-status'),
   selectRelinkFile: (oldPath) => ipcRenderer.invoke('library:select-relink-file', oldPath),
   autoRelinkLibrary: (items) => ipcRenderer.invoke('library:auto-relink', items),
   getCurrentAccountUser: () => ipcRenderer.invoke('account:get-current-user'),

@@ -5,6 +5,26 @@ const VIDEO_EXTENSIONS = new Set([
 ]);
 const SUBTITLE_EXTENSIONS = new Set(['.srt', '.vtt']);
 
+const RELEASE_NOISE_TOKENS = new Set([
+  '360p', '480p', '576p', '720p', '1080p', '1080i', '2160p', '4320p', '4k', '8k', 'uhd',
+  'webdl', 'webrip', 'web', 'bluray', 'bdrip', 'brrip', 'dvdrip', 'hdtv', 'remux',
+  'x264', 'x265', 'h264', 'h265', 'hevc', 'avc', 'xvid', 'av1', '10bit', '8bit',
+  'aac', 'aac2', 'aac5', 'ac3', 'eac3', 'dts', 'dtshd', 'truehd', 'atmos', 'ddp', 'dd5',
+  'hdr', 'hdr10', 'hdr10plus', 'dolbyvision', 'dv', 'sdr', 'imax',
+  'proper', 'repack', 'rerip', 'internal', 'limited', 'extendedsample',
+]);
+
+const EDITION_PATTERNS = [
+  { pattern: /\b(?:director'?s|directors)\s+cut\b/i, label: "Director's Cut" },
+  { pattern: /\bextended(?:\s+(?:cut|edition))?\b/i, label: 'Extended Edition' },
+  { pattern: /\btheatrical(?:\s+(?:cut|edition))?\b/i, label: 'Theatrical Cut' },
+  { pattern: /\bultimate(?:\s+edition)?\b/i, label: 'Ultimate Edition' },
+  { pattern: /\bfinal\s+cut\b/i, label: 'Final Cut' },
+  { pattern: /\bunrated(?:\s+(?:cut|edition))?\b/i, label: 'Unrated' },
+  { pattern: /\bremastered(?:\s+edition)?\b/i, label: 'Remastered' },
+  { pattern: /\bredux\b/i, label: 'Redux' },
+];
+
 function normalizeComparable(value) {
   return String(value || '')
     .normalize('NFKD')
@@ -14,18 +34,77 @@ function normalizeComparable(value) {
     .trim();
 }
 
-function cleanDisplayTitle(value) {
-  return String(value || '')
-    .replace(/\b(?:2160p|1080p|720p|480p|4k|uhd|web[ ._-]?dl|webrip|blu[ ._-]?ray|brrip|x264|x265|h264|h265|hevc|aac|dts)\b.*$/i, '')
+function compactReleaseToken(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function isReleaseNoiseToken(value) {
+  const compact = compactReleaseToken(value);
+  if (RELEASE_NOISE_TOKENS.has(compact)) return true;
+  return /^(?:ddp?|aac|dts|ac3|eac3)\d(?:1|0)?$/i.test(compact)
+    || /^(?:yts|yify|rarbg)$/i.test(compact);
+}
+
+function parseMediaTitle(value) {
+  const input = String(value || '');
+  const extension = path.extname(input);
+  const basename = VIDEO_EXTENSIONS.has(extension.toLowerCase())
+    ? path.basename(input, extension)
+    : path.basename(input);
+  let text = basename
+    .replace(/-([A-Z0-9]{3,12})$/, '')
+    .replace(/[\[({]([^\])}]+)[\])}]/g, (whole, inner) => (
+      String(inner).split(/\s+/).some(isReleaseNoiseToken) ? ' ' : whole
+    ))
     .replace(/[._]+/g, ' ')
     .replace(/\s+/g, ' ')
+    .trim();
+
+  let edition = '';
+  for (const candidate of EDITION_PATTERNS) {
+    if (!candidate.pattern.test(text)) continue;
+    edition = candidate.label;
+    text = text.replace(candidate.pattern, ' ').replace(/\s+/g, ' ').trim();
+    break;
+  }
+
+  const tokens = text.split(/\s+/).filter(Boolean);
+  let cutoff = tokens.length;
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (isReleaseNoiseToken(tokens[index])) {
+      cutoff = index;
+      break;
+    }
+  }
+
+  let year = null;
+  const currentYear = new Date().getUTCFullYear() + 1;
+  for (let index = 1; index < cutoff; index += 1) {
+    const candidate = Number(tokens[index].replace(/[()]/g, ''));
+    if (!Number.isInteger(candidate) || candidate < 1900 || candidate > currentYear) continue;
+    const suffix = tokens.slice(index + 1, cutoff);
+    if (suffix.length && !suffix.every(isReleaseNoiseToken)) continue;
+    year = candidate;
+    cutoff = index;
+    break;
+  }
+
+  let lookupTitle = tokens.slice(0, cutoff).join(' ')
+    .replace(/\s+-\s+[A-Z0-9]{2,12}$/g, '')
     .replace(/[ ._-]+$/, '')
     .trim();
+  if (!lookupTitle && !tokens.length) lookupTitle = text || basename;
+
+  const displayTitle = edition ? `${lookupTitle} - ${edition}` : lookupTitle;
+  return { displayTitle, edition: edition || null, lookupTitle, year };
+}
+
+function cleanDisplayTitle(value) {
+  return parseMediaTitle(value).displayTitle;
 }
 
 function titleFromFilename(filename) {
-  const basename = path.basename(String(filename || ''), path.extname(String(filename || '')));
-  return cleanDisplayTitle(basename);
+  return cleanDisplayTitle(filename);
 }
 
 function parseEpisodeFilename(filename) {
@@ -66,6 +145,7 @@ function deriveTvFileInfo(filePath, tvRoot) {
   return {
     ...parsed,
     showName,
+    showLookupName: (!directoryLooksLikeSeason && firstDirectory) ? firstDirectory : parsed.showName,
     episodeTitle,
     displayName: `${parsed.code}${parsed.episodeEnd ? `-E${String(parsed.episodeEnd).padStart(2, '0')}` : ''}: ${episodeTitle}`,
   };
@@ -140,8 +220,10 @@ module.exports = {
   SUBTITLE_EXTENSIONS,
   VIDEO_EXTENSIONS,
   deriveTvFileInfo,
+  cleanDisplayTitle,
   isPathInsideRoot,
   normalizeComparable,
+  parseMediaTitle,
   parseByteRange,
   parseEpisodeFilename,
   scoreSubtitleMatch,

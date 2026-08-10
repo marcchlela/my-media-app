@@ -65,5 +65,5 @@ test('scanner is incremental, keeps stable IDs, and preserves offline catalogs',
 });
 
 test('catalog schema migration version is recorded', () => {
-  assert.ok(Number(getDb().prepare('PRAGMA user_version').get().user_version) >= 3);
+  assert.ok(Number(getDb().prepare('PRAGMA user_version').get().user_version) >= 4);
 });

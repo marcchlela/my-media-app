@@ -4,7 +4,7 @@ const path = require('path');
 const { ensureDatabase } = require('./account-store');
 const { normalizeComparable } = require('./media-utils');
 
-const CATALOG_SCHEMA_VERSION = 3;
+const CATALOG_SCHEMA_VERSION = 4;
 
 function now() {
   return Date.now();
@@ -20,6 +20,11 @@ function parseJson(value, fallback) {
   } catch (err) {
     return fallback;
   }
+}
+
+function ensureColumn(db, tableName, columnName, definition) {
+  const columns = new Set(db.prepare(`PRAGMA table_info(${tableName})`).all().map((column) => column.name));
+  if (!columns.has(columnName)) db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
 }
 
 function migrateCatalogSchema(db = ensureDatabase()) {
@@ -46,6 +51,7 @@ function migrateCatalogSchema(db = ensureDatabase()) {
       id TEXT PRIMARY KEY,
       stable_key TEXT NOT NULL UNIQUE,
       title TEXT NOT NULL,
+      source_title TEXT NOT NULL,
       normalized_title TEXT NOT NULL,
       tmdb_id INTEGER,
       poster_path TEXT,
@@ -69,6 +75,7 @@ function migrateCatalogSchema(db = ensureDatabase()) {
       relative_path TEXT,
       filename TEXT NOT NULL,
       title TEXT NOT NULL,
+      source_title TEXT NOT NULL,
       normalized_title TEXT NOT NULL,
       season_number INTEGER,
       episode_number INTEGER,
@@ -152,6 +159,13 @@ function migrateCatalogSchema(db = ensureDatabase()) {
     CREATE INDEX IF NOT EXISTS idx_subtitles_media ON subtitles(media_id);
   `);
 
+  ensureColumn(db, 'shows', 'source_title', 'TEXT');
+  ensureColumn(db, 'media_items', 'source_title', 'TEXT');
+  db.exec(`
+    UPDATE shows SET source_title = title WHERE source_title IS NULL OR source_title = '';
+    UPDATE media_items SET source_title = title WHERE source_title IS NULL OR source_title = '';
+  `);
+
   const currentVersion = Number(db.prepare('PRAGMA user_version').get()?.user_version || 0);
   if (currentVersion < CATALOG_SCHEMA_VERSION) {
     db.exec(`PRAGMA user_version = ${CATALOG_SCHEMA_VERSION};`);
@@ -227,38 +241,45 @@ function getCatalogCounts() {
 
 function upsertShow(title, metadata = {}) {
   const db = getDb();
-  const normalizedTitle = normalizeComparable(title) || 'unknown show';
+  const sourceTitle = String(metadata.sourceTitle || title || 'Unknown Show').trim();
+  const displayTitle = String(metadata.title || title || sourceTitle).trim();
+  const normalizedTitle = normalizeComparable(sourceTitle) || 'unknown show';
   const stableKey = metadata.tmdbId ? `tmdb:${metadata.tmdbId}` : `title:${normalizedTitle}`;
   let row = metadata.tmdbId
-    ? db.prepare('SELECT * FROM shows WHERE tmdb_id = ? OR stable_key = ? LIMIT 1').get(metadata.tmdbId, stableKey)
+    ? db.prepare('SELECT * FROM shows WHERE tmdb_id = ? OR normalized_title = ? OR stable_key = ? LIMIT 1')
+      .get(metadata.tmdbId, normalizedTitle, stableKey)
     : db.prepare('SELECT * FROM shows WHERE normalized_title = ? LIMIT 1').get(normalizedTitle);
   const timestamp = now();
   if (!row) {
     const id = createStableId('show');
     db.prepare(`
       INSERT INTO shows (
-        id, stable_key, title, normalized_title, tmdb_id, poster_path, backdrop_path,
+        id, stable_key, title, source_title, normalized_title, tmdb_id, poster_path, backdrop_path,
         overview, first_air_date, genres_json, rating, runtime_minutes, metadata_locked,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, stableKey, title, normalizedTitle, metadata.tmdbId || null, metadata.posterPath || null,
+      id, stableKey, displayTitle, sourceTitle, normalizedTitle, metadata.tmdbId || null, metadata.posterPath || null,
       metadata.backdropPath || null, metadata.overview || null, metadata.releaseDate || null,
       JSON.stringify(metadata.genres || []), metadata.rating ?? null, metadata.runtimeMinutes ?? null,
       metadata.metadataLocked ? 1 : 0, timestamp, timestamp
     );
     row = db.prepare('SELECT * FROM shows WHERE id = ?').get(id);
-  } else if (!row.metadata_locked && Object.keys(metadata).length) {
+  } else if (row.metadata_locked) {
+    db.prepare('UPDATE shows SET source_title = ?, normalized_title = ?, updated_at = ? WHERE id = ?')
+      .run(sourceTitle, normalizedTitle, timestamp, row.id);
+    row = db.prepare('SELECT * FROM shows WHERE id = ?').get(row.id);
+  } else if (Object.keys(metadata).length) {
     db.prepare(`
       UPDATE shows SET
-        title = ?, normalized_title = ?, tmdb_id = COALESCE(?, tmdb_id),
+        title = ?, source_title = ?, normalized_title = ?, tmdb_id = COALESCE(?, tmdb_id),
         poster_path = COALESCE(?, poster_path), backdrop_path = COALESCE(?, backdrop_path),
         overview = COALESCE(?, overview), first_air_date = COALESCE(?, first_air_date),
         genres_json = CASE WHEN ? != '[]' THEN ? ELSE genres_json END,
         rating = COALESCE(?, rating), runtime_minutes = COALESCE(?, runtime_minutes), updated_at = ?
       WHERE id = ?
     `).run(
-      title, normalizedTitle, metadata.tmdbId || null, metadata.posterPath || null,
+      displayTitle, sourceTitle, normalizedTitle, metadata.tmdbId || null, metadata.posterPath || null,
       metadata.backdropPath || null, metadata.overview || null, metadata.releaseDate || null,
       JSON.stringify(metadata.genres || []), JSON.stringify(metadata.genres || []),
       metadata.rating ?? null, metadata.runtimeMinutes ?? null, timestamp, row.id
@@ -304,6 +325,7 @@ function saveScannedMedia(record, existing = null) {
     showId: record.showId ?? existing?.show_id,
     filePath: record.filePath ?? existing?.file_path,
     relativePath: record.relativePath ?? existing?.relative_path,
+    sourceTitle: record.sourceTitle ?? record.title ?? existing?.source_title ?? existing?.title,
     normalizedTitle: record.normalizedTitle ?? existing?.normalized_title,
     seasonNumber: record.seasonNumber ?? existing?.season_number,
     episodeNumber: record.episodeNumber ?? existing?.episode_number,
@@ -325,11 +347,24 @@ function saveScannedMedia(record, existing = null) {
     createdAt: existing?.created_at || timestamp,
     lastSeenAt: timestamp,
   };
+  values.normalizedTitle = normalizeComparable(values.sourceTitle) || values.normalizedTitle;
+  if (existing?.metadata_locked) {
+    values.title = existing.title;
+    values.tmdbId = existing.tmdb_id;
+    values.posterPath = existing.poster_path;
+    values.backdropPath = existing.backdrop_path;
+    values.overview = existing.overview;
+    values.releaseDate = existing.release_date;
+    values.genres = parseJson(existing.genres_json, []);
+    values.rating = existing.rating;
+    values.runtimeMinutes = existing.runtime_minutes;
+    values.metadataLocked = 1;
+  }
   if (existing) {
     db.prepare(`
       UPDATE media_items SET
         source_id = ?, media_type = ?, show_id = ?, file_path = ?, relative_path = ?,
-        filename = ?, title = ?, normalized_title = ?, season_number = ?, episode_number = ?,
+        filename = ?, title = ?, source_title = ?, normalized_title = ?, season_number = ?, episode_number = ?,
         episode_end_number = ?, available = 1, file_size = ?, modified_at = ?, duration_seconds = ?,
         container = ?, video_codec = ?, audio_codec = ?, width = ?, height = ?,
         tmdb_id = COALESCE(?, tmdb_id), poster_path = COALESCE(?, poster_path),
@@ -341,7 +376,7 @@ function saveScannedMedia(record, existing = null) {
       WHERE id = ?
     `).run(
       values.sourceId, values.mediaType, values.showId || null, path.resolve(values.filePath),
-      values.relativePath || null, values.filename, values.title, values.normalizedTitle,
+      values.relativePath || null, values.filename, values.title, values.sourceTitle, values.normalizedTitle,
       values.seasonNumber || null, values.episodeNumber || null, values.episodeEndNumber || null,
       values.fileSize ?? null, values.modifiedAt ?? null, values.durationSeconds ?? null,
       values.container || null, values.videoCodec || null, values.audioCodec || null,
@@ -354,14 +389,14 @@ function saveScannedMedia(record, existing = null) {
     db.prepare(`
       INSERT INTO media_items (
         id, source_id, media_type, show_id, file_path, relative_path, filename, title,
-        normalized_title, season_number, episode_number, episode_end_number, available,
+        source_title, normalized_title, season_number, episode_number, episode_end_number, available,
         file_size, modified_at, duration_seconds, container, video_codec, audio_codec, width,
         height, tmdb_id, poster_path, backdrop_path, overview, release_date, genres_json,
         rating, runtime_minutes, metadata_locked, created_at, updated_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, values.sourceId, values.mediaType, values.showId || null, path.resolve(values.filePath),
-      values.relativePath || null, values.filename, values.title, values.normalizedTitle,
+      values.relativePath || null, values.filename, values.title, values.sourceTitle, values.normalizedTitle,
       values.seasonNumber || null, values.episodeNumber || null, values.episodeEndNumber || null,
       values.fileSize ?? null, values.modifiedAt ?? null, values.durationSeconds ?? null,
       values.container || null, values.videoCodec || null, values.audioCodec || null,
@@ -423,6 +458,51 @@ function getPrivateMedia(mediaId) {
   `).get(mediaId) || null;
 }
 
+function getPrivateShow(showId) {
+  const db = getDb();
+  const show = db.prepare('SELECT * FROM shows WHERE id = ?').get(showId);
+  if (!show) return null;
+  const episode = db.prepare(`
+    SELECT filename, relative_path FROM media_items
+    WHERE show_id = ? ORDER BY season_number, episode_number LIMIT 1
+  `).get(showId);
+  const relativeParts = String(episode?.relative_path || '').split(/[\\/]+/).filter(Boolean);
+  const lookupTitle = relativeParts.length > 1
+    ? relativeParts[0]
+    : String(episode?.filename || '').replace(/S\d{1,3}E\d{1,3}.*$/i, '');
+  return { ...show, lookup_title: lookupTitle || show.source_title || show.title };
+}
+
+function getMetadataTarget(targetType, targetId) {
+  if (targetType === 'show') return getPrivateShow(targetId);
+  const item = getPrivateMedia(targetId);
+  return item?.media_type === 'movie' ? item : null;
+}
+
+function getEpisodesForShow(showId) {
+  return getDb().prepare(`
+    SELECT * FROM media_items
+    WHERE media_type = 'episode' AND show_id = ?
+    ORDER BY season_number, episode_number
+  `).all(showId);
+}
+
+function listMissingMetadataTargets() {
+  const db = getDb();
+  const shows = db.prepare(`
+    SELECT 'show' AS target_type, * FROM shows
+    WHERE metadata_locked = 0 AND (tmdb_id IS NULL OR poster_path IS NULL OR poster_path = '')
+    ORDER BY title
+  `).all();
+  const movies = db.prepare(`
+    SELECT 'movie' AS target_type, * FROM media_items
+    WHERE media_type = 'movie' AND metadata_locked = 0
+      AND (tmdb_id IS NULL OR poster_path IS NULL OR poster_path = '')
+    ORDER BY title
+  `).all();
+  return [...shows, ...movies];
+}
+
 function getPrivateSubtitle(mediaId, subtitleId) {
   return getDb().prepare(`
     SELECT subtitles.*, media_items.source_id, media_sources.root_path AS source_root
@@ -457,6 +537,7 @@ function getPublicLibrary(userId = null) {
       shows.genres_json AS show_genres_json,
       shows.rating AS show_rating,
       shows.runtime_minutes AS show_runtime_minutes
+      ,shows.metadata_locked AS show_metadata_locked
     FROM media_items
     LEFT JOIN shows ON shows.id = media_items.show_id
     ORDER BY media_items.media_type, media_items.title, media_items.season_number, media_items.episode_number
@@ -508,6 +589,7 @@ function getPublicLibrary(userId = null) {
         ...(row.episode_end_number ? { episodeEnd: row.episode_end_number } : {}),
       } : null,
       tmdbId: isShow ? row.show_tmdb_id : row.tmdb_id,
+      metadataLocked: !!(isShow ? row.show_metadata_locked : row.metadata_locked),
       posterPath: override || (isShow ? row.show_poster_path : row.poster_path),
       customPosterTmdbPath: override,
       backdropPath: isShow ? (row.backdrop_path || row.show_backdrop_path) : row.backdrop_path,
@@ -618,24 +700,91 @@ function setMediaPosterOverride(userId, input, enabled) {
   return true;
 }
 
-function updateAdminMetadata(mediaId, input) {
+function applyAdminMetadata(targetType, targetId, input, { locked = true } = {}) {
   const db = getDb();
-  const item = getPrivateMedia(mediaId);
-  if (!item) return false;
+  const target = getMetadataTarget(targetType, targetId);
+  if (!target) return false;
+  const title = String(input?.title || target.title).trim();
+  const genres = JSON.stringify(Array.isArray(input?.genres) ? input.genres : []);
+  if (targetType === 'show') {
+    db.prepare(`
+      UPDATE shows SET
+        title = ?, tmdb_id = ?, poster_path = ?, backdrop_path = ?, overview = ?,
+        first_air_date = ?, genres_json = ?, rating = ?, runtime_minutes = ?,
+        metadata_locked = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      title, input?.tmdbId || null, input?.posterPath || null, input?.backdropPath || null,
+      input?.overview || null, input?.releaseDate || null, genres, input?.rating ?? null,
+      input?.runtimeMinutes ?? null, locked ? 1 : 0, now(), targetId
+    );
+  } else {
+    db.prepare(`
+      UPDATE media_items SET
+        title = ?, tmdb_id = ?, poster_path = ?, backdrop_path = ?, overview = ?,
+        release_date = ?, genres_json = ?, rating = ?, runtime_minutes = ?,
+        metadata_locked = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      title, input?.tmdbId || null, input?.posterPath || null, input?.backdropPath || null,
+      input?.overview || null, input?.releaseDate || null, genres, input?.rating ?? null,
+      input?.runtimeMinutes ?? null, locked ? 1 : 0, now(), targetId
+    );
+  }
+  return true;
+}
+
+function clearAdminMetadata(targetType, targetId) {
+  const db = getDb();
+  const target = getMetadataTarget(targetType, targetId);
+  if (!target) return false;
+  if (targetType === 'show') {
+    db.prepare(`
+      UPDATE shows SET
+        title = COALESCE(NULLIF(source_title, ''), title), tmdb_id = NULL, poster_path = NULL,
+        backdrop_path = NULL, overview = NULL, first_air_date = NULL, genres_json = '[]',
+        rating = NULL, runtime_minutes = NULL, metadata_locked = 0, updated_at = ?
+      WHERE id = ?
+    `).run(now(), targetId);
+    db.prepare(`
+      UPDATE media_items SET
+        title = COALESCE(NULLIF(source_title, ''), title), tmdb_id = NULL, poster_path = NULL,
+        backdrop_path = NULL, overview = NULL, release_date = NULL, genres_json = '[]',
+        rating = NULL, runtime_minutes = NULL, metadata_locked = 0, updated_at = ?
+      WHERE show_id = ? AND metadata_locked = 0
+    `).run(now(), targetId);
+  } else {
+    db.prepare(`
+      UPDATE media_items SET
+        title = COALESCE(NULLIF(source_title, ''), title), tmdb_id = NULL, poster_path = NULL,
+        backdrop_path = NULL, overview = NULL, release_date = NULL, genres_json = '[]',
+        rating = NULL, runtime_minutes = NULL, metadata_locked = 0, updated_at = ?
+      WHERE id = ?
+    `).run(now(), targetId);
+  }
+  return true;
+}
+
+function updateEpisodeMetadata(mediaId, input) {
+  const db = getDb();
+  const item = db.prepare("SELECT * FROM media_items WHERE id = ? AND media_type = 'episode'").get(mediaId);
+  if (!item || item.metadata_locked) return false;
   const title = String(input?.title || item.title).trim();
   db.prepare(`
     UPDATE media_items SET
-      title = ?, normalized_title = ?, tmdb_id = ?, poster_path = ?, backdrop_path = ?,
-      overview = ?, release_date = ?, genres_json = ?, rating = ?, runtime_minutes = ?,
-      metadata_locked = 1, updated_at = ?
+      title = ?, tmdb_id = COALESCE(?, tmdb_id), backdrop_path = COALESCE(?, backdrop_path),
+      overview = COALESCE(?, overview), rating = COALESCE(?, rating),
+      runtime_minutes = COALESCE(?, runtime_minutes), updated_at = ?
     WHERE id = ?
   `).run(
-    title, normalizeComparable(title), input?.tmdbId || null, input?.posterPath || null,
-    input?.backdropPath || null, input?.overview || null, input?.releaseDate || null,
-    JSON.stringify(Array.isArray(input?.genres) ? input.genres : []), input?.rating ?? null,
-    input?.runtimeMinutes ?? null, now(), mediaId
+    title, input?.tmdbId || null, input?.backdropPath || null, input?.overview || null,
+    input?.rating ?? null, input?.runtimeMinutes ?? null, now(), mediaId
   );
   return true;
+}
+
+function updateAdminMetadata(mediaId, input) {
+  return applyAdminMetadata('movie', mediaId, input, { locked: true });
 }
 
 function migrateLegacyAccountState() {
@@ -657,19 +806,25 @@ function migrateLegacyAccountState() {
 }
 
 module.exports = {
+  applyAdminMetadata,
+  clearAdminMetadata,
   findMediaByPath,
   findRelinkCandidate,
   getCatalogCounts,
   getDb,
+  getEpisodesForShow,
   getMediaSources,
+  getMetadataTarget,
   getMimeType,
   getPrivateMedia,
+  getPrivateShow,
   getPrivateSubtitle,
   getPublicLibrary,
   getSetting,
   markUnseenUnavailable,
   migrateCatalogSchema,
   migrateLegacyAccountState,
+  listMissingMetadataTargets,
   replaceSubtitles,
   saveMediaProgress,
   saveScannedMedia,
@@ -677,6 +832,7 @@ module.exports = {
   setMediaPosterOverride,
   setSetting,
   updateAdminMetadata,
+  updateEpisodeMetadata,
   updateSourceScanState,
   upsertMediaSource,
   upsertShow,

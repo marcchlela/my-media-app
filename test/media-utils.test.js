@@ -6,6 +6,7 @@ const {
   isPathInsideRoot,
   parseByteRange,
   parseEpisodeFilename,
+  parseMediaTitle,
   scoreSubtitleMatch,
   titleFromFilename,
 } = require('../media-utils');
@@ -13,6 +14,16 @@ const {
 test('normalizes movie filenames into readable titles', () => {
   assert.equal(titleFromFilename('Sound.of.Metal.1080p.x264.mp4'), 'Sound of Metal');
   assert.equal(titleFromFilename('The_Batman.mp4'), 'The Batman');
+  assert.deepEqual(parseMediaTitle('The.Batman.2022.2160p.WEB-DL.x265.DD5.1-GROUP.mkv'), {
+    displayTitle: 'The Batman',
+    edition: null,
+    lookupTitle: 'The Batman',
+    year: 2022,
+  });
+  assert.equal(titleFromFilename('Blade.Runner.2049.2017.4K.HDR.mkv'), 'Blade Runner 2049');
+  assert.equal(titleFromFilename('Apocalypse.Now.Redux.1979.1080p.BluRay.mkv'), 'Apocalypse Now - Redux');
+  assert.equal(titleFromFilename('Spider-Man.Homecoming.2017.BRRip.mp4'), 'Spider-Man Homecoming');
+  assert.equal(titleFromFilename('Sound.of.Metal-YIFY.mp4'), 'Sound of Metal');
 });
 
 test('parses single and multi-episode TV filenames', () => {

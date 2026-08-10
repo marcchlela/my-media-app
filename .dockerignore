@@ -7,7 +7,12 @@ dist
 node_modules
 test
 myflix-cinema-designs-v2
-myflix-electric
+myflix-electric/*
+!myflix-electric/assets
+myflix-electric/assets/*
+!myflix-electric/assets/generated-3d
+myflix-electric/assets/generated-3d/*
+!myflix-electric/assets/generated-3d/*-web.webp
 *.log
 *.sqlite
 *.sqlite-shm

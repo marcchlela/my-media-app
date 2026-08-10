@@ -4839,8 +4839,12 @@ function showSettings() {
           <span>Server Library</span>
           <small>Media folders are managed on the server. Local file import is disabled.</small>
         </div>
-        <button id="serverRescanBtn" class="settings-btn secondary">Rescan Server Library</button>
+        <div class="settings-actions">
+          <button id="serverRescanBtn" class="settings-btn secondary">Rescan Server Library</button>
+          <button id="serverMetadataRefreshBtn" class="settings-btn secondary">Refresh Missing Metadata</button>
+        </div>
         <div id="serverScanStatus" class="settings-status">Checking server scan status...</div>
+        <div id="serverMetadataStatus" class="settings-status">Checking metadata status...</div>
       </div>
     `;
   }
@@ -4969,6 +4973,8 @@ function showSettings() {
 
   const serverRescanBtn = document.getElementById('serverRescanBtn');
   const serverScanStatus = document.getElementById('serverScanStatus');
+  const serverMetadataRefreshBtn = document.getElementById('serverMetadataRefreshBtn');
+  const serverMetadataStatus = document.getElementById('serverMetadataStatus');
   const refreshServerScanStatus = async () => {
     if (!serverScanStatus || !window.api?.getServerLibraryScanStatus) return false;
     const result = await window.api.getServerLibraryScanStatus();
@@ -5004,6 +5010,42 @@ function showSettings() {
     setTimeout(poll, 500);
   });
   refreshServerScanStatus();
+
+  const refreshServerMetadataStatus = async () => {
+    if (!serverMetadataStatus || !window.api?.getServerMetadataRefreshStatus) return false;
+    const result = await window.api.getServerMetadataRefreshStatus();
+    if (!result?.ok) {
+      serverMetadataStatus.textContent = result?.error || 'Metadata status is unavailable.';
+      if (serverMetadataRefreshBtn) serverMetadataRefreshBtn.disabled = false;
+      return false;
+    }
+    const metadata = result.status || {};
+    if (serverMetadataRefreshBtn) serverMetadataRefreshBtn.disabled = !!metadata.running;
+    serverMetadataStatus.textContent = metadata.running
+      ? `Refreshing metadata: ${metadata.matched || 0} matched, ${metadata.unmatched || 0} unmatched...`
+      : `Last metadata refresh: ${metadata.matched || 0} matched, ${metadata.unmatched || 0} unmatched, ${metadata.failed || 0} failed.`;
+    return !!metadata.running;
+  };
+  serverMetadataRefreshBtn?.addEventListener('click', async () => {
+    serverMetadataRefreshBtn.disabled = true;
+    serverMetadataStatus.textContent = 'Starting metadata-only refresh...';
+    const result = await window.api.refreshServerMetadata?.();
+    if (!result?.ok) {
+      serverMetadataStatus.textContent = result?.error || 'Could not start metadata refresh.';
+      serverMetadataRefreshBtn.disabled = false;
+      return;
+    }
+    const poll = async () => {
+      const running = await refreshServerMetadataStatus();
+      if (running && serverMetadataStatus.isConnected) setTimeout(poll, 1500);
+      else if (serverMetadataStatus.isConnected) {
+        const loaded = await window.api.getLibrary();
+        currentLibrary = adoptLibraryItems(loaded);
+      }
+    };
+    setTimeout(poll, 500);
+  });
+  refreshServerMetadataStatus();
 
   const setStatus = () => {};
 
