@@ -43,15 +43,7 @@ function readEnvFile(filePath) {
 }
 
 function resolveTmdbApiKey() {
-  const fromProcess = cleanEnvValue(process.env.TMDB_API_KEY);
-  if (fromProcess) return fromProcess;
-
-  for (const envMap of loadEnvMaps()) {
-    const key = cleanEnvValue(envMap.get('TMDB_API_KEY'));
-    if (key) return key;
-  }
-
-  return '';
+  return resolveEnvValue('TMDB_API_KEY');
 }
 
 function loadEnvMaps() {
@@ -89,6 +81,45 @@ function resolveAdminEmails() {
   ));
 }
 
+function resolveEnvValue(name, fallback = '') {
+  const fromProcess = cleanEnvValue(process.env[name]);
+  if (fromProcess) return fromProcess;
+
+  for (const envMap of loadEnvMaps()) {
+    const value = cleanEnvValue(envMap.get(name));
+    if (value) return value;
+  }
+  return cleanEnvValue(fallback);
+}
+
+function resolveBoolean(name, fallback = false) {
+  const value = resolveEnvValue(name);
+  if (!value) return fallback;
+  if (['1', 'true', 'yes', 'on'].includes(value.toLowerCase())) return true;
+  if (['0', 'false', 'no', 'off'].includes(value.toLowerCase())) return false;
+  return fallback;
+}
+
+function resolveDataDirectory() {
+  return resolveEnvValue('DATA_DIR');
+}
+
+function resolveMediaDirectories() {
+  return {
+    movies: resolveEnvValue('MOVIES_DIR'),
+    tvShows: resolveEnvValue('TV_SHOWS_DIR'),
+  };
+}
+
+function resolveAllowedOrigins() {
+  return Array.from(new Set(
+    resolveEnvValue('ALLOWED_ORIGINS')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+  ));
+}
+
 function normalizeUrl(value) {
   const cleaned = cleanEnvValue(value);
   if (!cleaned) return '';
@@ -114,7 +145,12 @@ function resolveSharedServerUrl() {
 }
 
 module.exports = {
+  resolveAllowedOrigins,
   resolveAdminEmails,
+  resolveBoolean,
+  resolveDataDirectory,
+  resolveEnvValue,
+  resolveMediaDirectories,
   resolveSharedServerUrl,
   resolveTmdbApiKey,
 };

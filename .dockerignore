@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.env.local
+.data
+dist
+node_modules
+test
+myflix-cinema-designs-v2
+myflix-electric
+*.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

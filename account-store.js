@@ -2,9 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
-const { resolveAdminEmails } = require('./env-config');
+const { resolveAdminEmails, resolveDataDirectory } = require('./env-config');
 
 const WATCH_COMPLETE_THRESHOLD_PERCENT = 92;
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_IDLE_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
+const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 const APP_NAME = 'my-media-app';
 const LEGACY_DATA_DIR = path.join(__dirname, '.data');
 const LEGACY_DB_PATH = path.join(LEGACY_DATA_DIR, 'my-media-app.sqlite');
@@ -27,6 +30,9 @@ function hasAdminColumn(database) {
 }
 
 function resolveDataDir() {
+  const configured = resolveDataDirectory();
+  if (configured) return path.resolve(configured);
+
   const appData = process.env.APPDATA;
   if (appData) {
     return path.join(appData, APP_NAME);
@@ -205,6 +211,7 @@ function ensureDatabase() {
       user_id INTEGER NOT NULL,
       created_at INTEGER NOT NULL,
       last_seen_at INTEGER NOT NULL,
+      expires_at INTEGER,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
@@ -250,6 +257,14 @@ function ensureDatabase() {
     // Column already exists on current databases.
   }
 
+  try {
+    db.exec('ALTER TABLE sessions ADD COLUMN expires_at INTEGER;');
+  } catch (err) {
+    // Column already exists on current databases.
+  }
+  db.prepare('UPDATE sessions SET expires_at = created_at + ? WHERE expires_at IS NULL')
+    .run(SESSION_MAX_AGE_MS);
+
   maybeMigrateLegacyDatabase(db, activeDbPath);
   ensureAdminBootstrap(db);
 
@@ -265,14 +280,6 @@ function ensureAdminBootstrap(db) {
       .run(Date.now(), ...Array.from(configuredAdminEmails));
   }
 
-  const adminCountRow = db.prepare('SELECT COUNT(*) AS count FROM users WHERE is_admin = 1').get();
-  if ((adminCountRow?.count || 0) > 0) return;
-  if (configuredAdminEmails.size) return;
-
-  const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC, id ASC LIMIT 1').get();
-  if (!firstUser?.id) return;
-
-  db.prepare('UPDATE users SET is_admin = 1, updated_at = ? WHERE id = ?').run(Date.now(), firstUser.id);
 }
 
 function normalizeEmail(email) {
@@ -317,16 +324,21 @@ function createSessionToken(userId) {
   const now = Date.now();
   const token = crypto.randomBytes(32).toString('hex');
   db.prepare(`
-    INSERT INTO sessions (token, user_id, created_at, last_seen_at)
-    VALUES (?, ?, ?, ?)
-  `).run(token, userId, now, now);
+    INSERT INTO sessions (token, user_id, created_at, last_seen_at, expires_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(token, userId, now, now, now + SESSION_MAX_AGE_MS);
   return token;
 }
 
 function touchSessionToken(token) {
   if (!token) return;
   const db = ensureDatabase();
-  db.prepare('UPDATE sessions SET last_seen_at = ? WHERE token = ?').run(Date.now(), token);
+  const now = Date.now();
+  db.prepare(`
+    UPDATE sessions
+    SET last_seen_at = ?
+    WHERE token = ? AND last_seen_at < ? AND expires_at > ?
+  `).run(now, token, now - SESSION_TOUCH_INTERVAL_MS, now);
 }
 
 function deleteSessionToken(token) {
@@ -339,6 +351,7 @@ function getUserBySessionToken(token) {
   if (!token) return null;
   const db = ensureDatabase();
   const adminSelect = hasAdminColumn(db) ? 'users.is_admin' : '0 AS is_admin';
+  const now = Date.now();
   const row = db.prepare(`
     SELECT
       users.id,
@@ -350,8 +363,20 @@ function getUserBySessionToken(token) {
     FROM sessions
     JOIN users ON users.id = sessions.user_id
     WHERE sessions.token = ?
-  `).get(token);
+      AND sessions.expires_at > ?
+      AND sessions.last_seen_at > ?
+  `).get(token, now, now - SESSION_IDLE_TIMEOUT_MS);
+  if (!row) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
   return publicUser(row);
+}
+
+function pruneExpiredSessions() {
+  const db = ensureDatabase();
+  const now = Date.now();
+  return Number(db.prepare(`
+    DELETE FROM sessions
+    WHERE expires_at <= ? OR last_seen_at <= ?
+  `).run(now, now - SESSION_IDLE_TIMEOUT_MS).changes || 0);
 }
 
 function validateSignupInput(input) {
@@ -371,8 +396,8 @@ function validateSignupInput(input) {
   if (email && !isValidEmail(email)) {
     fieldErrors.email = 'Enter a valid email address.';
   }
-  if (password && password.length < 6) {
-    fieldErrors.password = 'Password must be at least 6 characters.';
+  if (password && password.length < 10) {
+    fieldErrors.password = 'Password must be at least 10 characters.';
   }
   if (password && confirmPassword && password !== confirmPassword) {
     fieldErrors.confirmPassword = 'Passwords do not match.';
@@ -408,11 +433,8 @@ function createUserAccount(input) {
   const now = Date.now();
   const { saltHex, hashHex } = hashPassword(parsed.password);
   const canUseAdminColumn = hasAdminColumn(db);
-  const adminCountRow = canUseAdminColumn
-    ? db.prepare('SELECT COUNT(*) AS count FROM users WHERE is_admin = 1').get()
-    : { count: 0 };
   const isConfiguredAdmin = configuredAdminEmails.has(parsed.email);
-  const isAdmin = isConfiguredAdmin || ((adminCountRow?.count || 0) === 0 && configuredAdminEmails.size === 0) ? 1 : 0;
+  const isAdmin = isConfiguredAdmin ? 1 : 0;
   const result = canUseAdminColumn
     ? db.prepare(`
       INSERT INTO users (first_name, last_name, email, password_salt, password_hash, is_admin, created_at, updated_at)
@@ -857,10 +879,17 @@ function syncLibraryProgressForUser(userId, items) {
   return synced;
 }
 
+function closeDatabase() {
+  if (!dbInstance) return;
+  dbInstance.close();
+  dbInstance = null;
+}
+
 module.exports = {
   WATCH_COMPLETE_THRESHOLD_PERCENT,
   addFavoriteForUser,
   clearPosterOverrideForUser,
+  closeDatabase,
   createUserAccount,
   deleteSessionToken,
   getFavoriteKeyMapForUser,
@@ -874,9 +903,11 @@ module.exports = {
   mergePosterOverridesIntoLibrary,
   mergeWatchProgressForUser,
   mergeWatchProgressIntoLibrary,
+  pruneExpiredSessions,
   removeFavoriteForUser,
   syncLibraryProgressForUser,
   touchSessionToken,
   upsertPosterOverrideForUser,
   upsertWatchProgress,
+  ensureDatabase,
 };

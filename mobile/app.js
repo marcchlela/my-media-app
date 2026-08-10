@@ -41,6 +41,7 @@ let selectedGenreFilter = 'all';
 let selectedSort = 'default';
 let searchRenderTimer = null;
 let currentUser = null;
+let allowSignup = true;
 let currentPlayerItem = null;
 let playerControlsHideTimer = null;
 let playerClickToggleTimer = null;
@@ -314,7 +315,7 @@ function normalizeEpisodeRangesInLibrary(items) {
 
   normalized.forEach((item, index) => {
     if (!item?.isShow || !item?.episode?.season || !item?.episode?.episode) return;
-    const key = `${item.showKey || item.showName || item.name || ''}::${item.episode.season}`;
+    const key = `${item.showId || item.showKey || item.showName || item.name || ''}::${item.episode.season}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push({ index, item });
   });
@@ -370,18 +371,14 @@ function isShowFavorite(group) {
 function buildFavoritePayloadForMovie(item) {
   return {
     isShow: false,
-    mediaPath: item?.path || '',
-    mediaName: item?.title || item?.name || 'Movie',
-    tmdbId: item?.tmdbId ?? null,
+    mediaId: item?.id || '',
   };
 }
 
 function buildFavoritePayloadForShow(group) {
   return {
     isShow: true,
-    showKey: group?.key || '',
-    mediaName: group?.name || 'TV Show',
-    tmdbId: group?.tmdbId ?? null,
+    showId: group?.id || group?.key || '',
   };
 }
 
@@ -396,7 +393,7 @@ async function setMovieFavorite(item, isFavorite) {
   if (!currentUser) return false;
   await setFavoriteState(buildFavoritePayloadForMovie(item), isFavorite);
   libraryItems = libraryItems.map((entry) => (
-    entry.path === item.path
+    entry.id === item.id
       ? { ...entry, isFavorite }
       : entry
   ));
@@ -408,7 +405,7 @@ async function setShowFavorite(group, isFavorite) {
   await setFavoriteState(buildFavoritePayloadForShow(group), isFavorite);
   libraryItems = libraryItems.map((entry) => {
     if (!entry.isShow) return entry;
-    const entryKey = Number.isFinite(entry.tmdbId) ? `tmdb:${entry.tmdbId}` : (entry.showKey || normalize(entry.showName || entry.title || entry.name));
+    const entryKey = entry.showId || entry.showKey || normalize(entry.showName || entry.title || entry.name);
     return entryKey === group.key ? { ...entry, isFavorite } : entry;
   });
   return true;
@@ -508,16 +505,18 @@ function getShowGroups() {
   for (const item of libraryItems) {
     if (!item.isShow) continue;
     const keyBase = item.showName || item.title || item.name;
-    const key = Number.isFinite(item.tmdbId) ? `tmdb:${item.tmdbId}` : (item.showKey || normalize(keyBase));
+    const key = item.showId || item.showKey || normalize(keyBase);
     if (!key) continue;
 
     if (!map.has(key)) {
       map.set(key, {
+        id: item.showId || key,
         key,
         tmdbId: Number.isFinite(item.tmdbId) ? item.tmdbId : null,
         name: item.showName || item.title || 'TV Show',
         posterPath: item.posterPath || null,
         backdropPath: item.backdropPath || null,
+        overview: item.overview || null,
         releaseDate: item.releaseDate || null,
         rating: Number.isFinite(item.rating) ? item.rating : null,
         runtime: Number.isFinite(item.runtime) ? item.runtime : null,
@@ -530,6 +529,7 @@ function getShowGroups() {
     if (!Number.isFinite(group.tmdbId) && Number.isFinite(item.tmdbId)) group.tmdbId = item.tmdbId;
     if (!group.posterPath && item.posterPath) group.posterPath = item.posterPath;
     if (!group.backdropPath && item.backdropPath) group.backdropPath = item.backdropPath;
+    if (!group.overview && item.overview) group.overview = item.overview;
     if (!group.releaseDate && item.releaseDate) group.releaseDate = item.releaseDate;
     if (!Number.isFinite(group.rating) && Number.isFinite(item.rating)) group.rating = item.rating;
     if (!Number.isFinite(group.runtime) && Number.isFinite(item.runtime)) group.runtime = item.runtime;
@@ -844,10 +844,10 @@ function stripLibraryWatchProgress(items) {
     : [];
 }
 
-function applyLocalWatchProgress(mediaPath, watchProgress) {
-  if (!mediaPath || !watchProgress) return;
+function applyLocalWatchProgress(mediaId, watchProgress) {
+  if (!mediaId || !watchProgress) return;
   libraryItems = libraryItems.map((item) => (
-    item.path === mediaPath
+    item.id === mediaId
       ? { ...item, watchProgress }
       : item
   ));
@@ -857,19 +857,17 @@ function applyLocalWatchProgress(mediaPath, watchProgress) {
 }
 
 async function saveWatchProgress(item, currentTime, duration, forceComplete = false) {
-  if (!item?.path) return;
+  if (!item?.id) return;
   if (!currentUser) return;
   const watchProgress = buildWatchProgress(currentTime, duration, forceComplete);
   if (!watchProgress) return;
 
-  applyLocalWatchProgress(item.path, watchProgress);
+  applyLocalWatchProgress(item.id, watchProgress);
   try {
     await apiRequest('/api/account/progress', {
       method: 'POST',
       body: {
-        mediaPath: item.path,
-        mediaName: item.name || item.title || '',
-        isShow: !!item.isShow,
+        mediaId: item.id,
         ...watchProgress,
       },
     });
@@ -1145,7 +1143,9 @@ function renderAccount() {
 
     const copy = document.createElement('p');
     copy.className = 'account-copy';
-    copy.textContent = 'Create an optional account to keep your continue-watching progress synced across devices.';
+    copy.textContent = allowSignup
+      ? 'Create an optional account to keep your continue-watching progress synced across devices.'
+      : 'Sign in to keep your continue-watching progress synced across devices.';
 
     const actions = document.createElement('div');
     actions.className = 'account-actions';
@@ -1161,7 +1161,7 @@ function renderAccount() {
     signupBtn.addEventListener('click', () => openAuthModal('signup'));
 
     actions.appendChild(loginBtn);
-    actions.appendChild(signupBtn);
+    if (allowSignup) actions.appendChild(signupBtn);
     card.appendChild(heading);
     card.appendChild(copy);
     card.appendChild(actions);
@@ -1194,6 +1194,10 @@ function renderAccount() {
   }
 
   content.appendChild(card);
+
+  if (currentUser?.isAdmin) {
+    content.appendChild(createAdminScanPanel());
+  }
 
   if (!currentUser) {
     return;
@@ -1237,6 +1241,59 @@ function renderAccount() {
   });
 
   content.appendChild(grid);
+}
+
+function createAdminScanPanel() {
+  const panel = document.createElement('div');
+  panel.className = 'settings-card account-card';
+  const heading = document.createElement('h2');
+  heading.className = 'account-title';
+  heading.textContent = 'Server Library';
+  const copy = document.createElement('p');
+  copy.className = 'account-copy';
+  copy.textContent = 'Scan the configured server folders for newly added or reconnected media.';
+  const status = document.createElement('p');
+  status.className = 'account-copy';
+  status.textContent = 'Checking scan status...';
+  const button = document.createElement('button');
+  button.className = 'solid-btn';
+  button.textContent = 'Rescan Library';
+
+  const refreshStatus = async () => {
+    try {
+      const result = await apiRequest('/api/admin/library/scan/status');
+      const scan = result?.status || {};
+      button.disabled = !!scan.running;
+      status.textContent = scan.running
+        ? `Scanning: ${scan.filesScanned || 0} files checked, ${scan.new || 0} new.`
+        : `Last scan: ${scan.filesScanned || 0} checked, ${scan.new || 0} new, ${scan.updated || 0} updated, ${scan.unavailable || 0} unavailable.`;
+      return !!scan.running;
+    } catch (err) {
+      status.textContent = 'Scan status is unavailable.';
+      button.disabled = false;
+      return false;
+    }
+  };
+
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    status.textContent = 'Starting server scan...';
+    try {
+      await apiRequest('/api/admin/library/scan', { method: 'POST' });
+      const poll = async () => {
+        const running = await refreshStatus();
+        if (running && panel.isConnected) setTimeout(poll, 1500);
+        else if (panel.isConnected) await loadLibrary();
+      };
+      setTimeout(poll, 500);
+    } catch (err) {
+      status.textContent = err.message || 'Could not start the scan.';
+      button.disabled = false;
+    }
+  });
+  panel.append(heading, copy, button, status);
+  refreshStatus();
+  return panel;
 }
 
 function createField(name, labelText, type = 'text') {
@@ -1418,6 +1475,7 @@ async function loadSessionUser() {
   try {
     const result = await apiRequest('/api/account/me');
     currentUser = result?.authenticated ? result.user : null;
+    allowSignup = result?.allowSignup !== false;
   } catch (err) {
     currentUser = null;
   }
@@ -1426,7 +1484,7 @@ async function loadSessionUser() {
 async function loadLibrary({ render = true } = {}) {
   statusText.textContent = 'Loading library...';
   try {
-    const res = await fetch('/library');
+    const res = await fetch('/api/library');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     libraryItems = normalizeEpisodeRangesInLibrary(await res.json());
     if (!currentUser) {
@@ -1453,24 +1511,29 @@ async function refreshSessionAndLibrary({ goHome = false } = {}) {
 }
 
 async function fetchMovieDetails(item) {
-  const key = normalize(item.title || item.name);
+  const key = item.id || normalize(item.title || item.name);
   if (movieDetailCache.has(key)) return movieDetailCache.get(key);
-
-  const searchData = await apiGet('/api/tmdb/movie/search', { q: item.title || item.name || '' });
-  const movie = searchData?.results?.[0];
-  if (!movie?.id) return null;
-
-  const [detailsRes, creditsRes] = await Promise.all([
-    apiGet(`/api/tmdb/movie/${movie.id}`),
-    apiGet(`/api/tmdb/movie/${movie.id}/credits`),
-  ]);
-
-  const result = { details: detailsRes, credits: creditsRes };
+  const details = {
+    id: item.tmdbId,
+    title: item.title || item.name,
+    poster_path: item.posterPath,
+    backdrop_path: item.backdropPath,
+    overview: item.overview,
+    release_date: item.releaseDate,
+    vote_average: item.rating,
+    runtime: item.runtime,
+    genres: (item.genreNames || []).map((name) => ({ name })),
+  };
+  const credits = item.tmdbId
+    ? await apiGet(`/api/tmdb/movie/${item.tmdbId}/credits`).catch(() => null)
+    : null;
+  const result = { details, credits };
   movieDetailCache.set(key, result);
   return result;
 }
 
 async function fetchMovieVideos(item) {
+  if (item.tmdbId) return apiGet(`/api/tmdb/movie/${item.tmdbId}/videos`);
   const searchData = await apiGet('/api/tmdb/movie/search', { q: item.title || item.name || '' });
   const movie = searchData?.results?.[0];
   if (!movie?.id) return null;
@@ -1556,27 +1619,21 @@ async function fetchShowDetails(group) {
     : (group?.key || normalize(group.name));
   if (showDetailCache.has(cacheKey)) return showDetailCache.get(cacheKey);
 
-  if (Number.isFinite(group?.tmdbId)) {
-    const [detailsRes, creditsRes] = await Promise.all([
-      apiGet(`/api/tmdb/tv/${group.tmdbId}`),
-      apiGet(`/api/tmdb/tv/${group.tmdbId}/credits`),
-    ]);
-
-    const result = { details: detailsRes, credits: creditsRes };
-    showDetailCache.set(cacheKey, result);
-    return result;
-  }
-
-  const searchData = await apiGet('/api/tmdb/tv/search', { q: group.name || '' });
-  const show = searchData?.results?.[0];
-  if (!show?.id) return null;
-
-  const [detailsRes, creditsRes] = await Promise.all([
-    apiGet(`/api/tmdb/tv/${show.id}`),
-    apiGet(`/api/tmdb/tv/${show.id}/credits`),
-  ]);
-
-  const result = { details: detailsRes, credits: creditsRes };
+  const details = {
+    id: group.tmdbId,
+    name: group.name,
+    poster_path: group.posterPath,
+    backdrop_path: group.backdropPath,
+    overview: group.overview,
+    first_air_date: group.releaseDate,
+    vote_average: group.rating,
+    episode_run_time: group.runtime ? [group.runtime] : [],
+    genres: (group.genreNames || []).map((name) => ({ name })),
+  };
+  const credits = group.tmdbId
+    ? await apiGet(`/api/tmdb/tv/${group.tmdbId}/credits`).catch(() => null)
+    : null;
+  const result = { details, credits };
   showDetailCache.set(cacheKey, result);
   return result;
 }
@@ -1784,7 +1841,7 @@ function renderMovieDetailCard(item, meta) {
       try {
         const nextFavorite = !isMovieFavorite(item);
         await setMovieFavorite(item, nextFavorite);
-        const refreshed = libraryItems.find((entry) => entry.path === item.path) || item;
+        const refreshed = libraryItems.find((entry) => entry.id === item.id) || item;
         detailState = { ...detailState, item: refreshed };
         renderMovieDetailCard(refreshed, meta);
       } catch (err) {

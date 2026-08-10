@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('api', {
   probeMediaFile: (filePath) => ipcRenderer.invoke('media:probe', filePath),
   prepareSubtitleFile: (subtitlePath) => ipcRenderer.invoke('prepare-subtitle-file', subtitlePath),
   scanMissingLibraryItems: (items) => ipcRenderer.invoke('library:scan-missing', items),
+  scanServerLibrary: () => ipcRenderer.invoke('server:library-scan'),
+  getServerLibraryScanStatus: () => ipcRenderer.invoke('server:library-scan-status'),
   selectRelinkFile: (oldPath) => ipcRenderer.invoke('library:select-relink-file', oldPath),
   autoRelinkLibrary: (items) => ipcRenderer.invoke('library:auto-relink', items),
   getCurrentAccountUser: () => ipcRenderer.invoke('account:get-current-user'),

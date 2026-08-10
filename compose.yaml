@@ -1,0 +1,30 @@
+services:
+  myflix:
+    build: .
+    container_name: myflix
+    hostname: myflix
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATA_DIR: /data
+      MOVIES_DIR: /media/Movies
+      TV_SHOWS_DIR: /media/TV Shows
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-true}
+      REQUIRE_AUTH: ${REQUIRE_AUTH:-false}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      SCAN_ON_STARTUP: ${SCAN_ON_STARTUP:-true}
+      ENABLE_LEGACY_PATH_ROUTES: "false"
+    volumes:
+      - /srv/myflix/data:/data
+      - /srv/media/kingston:/media:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true

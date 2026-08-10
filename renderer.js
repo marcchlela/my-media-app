@@ -149,7 +149,7 @@ function isCurrentUserAdmin() {
 }
 
 function isSharedLibraryMode() {
-  return !!desktopAppContext.sharedServerConfigured && !isCurrentUserAdmin();
+  return !!desktopAppContext.useSharedLibrary;
 }
 
 function resolveMediaSource(item) {
@@ -252,7 +252,7 @@ function setPlayerButtonIcon(button, iconName, label) {
 function refreshAdminUi() {
   const importMenu = button?.closest('.import-menu');
   if (importMenu) {
-    importMenu.classList.toggle('hidden', !isCurrentUserAdmin());
+    importMenu.classList.toggle('hidden', !isCurrentUserAdmin() || isSharedLibraryMode());
   }
   if (!isCurrentUserAdmin()) {
     toggleImportDropdown(false);
@@ -260,9 +260,11 @@ function refreshAdminUi() {
 }
 
 function ensureAdminAccess(message = 'Only the admin account can manage the library from this app.') {
-  if (isCurrentUserAdmin()) return true;
+  if (isCurrentUserAdmin() && !isSharedLibraryMode()) return true;
   clearUiErrors();
-  showUiError(message);
+  showUiError(isSharedLibraryMode()
+    ? 'This library is managed by the shared server. Use Rescan Library in Settings.'
+    : message);
   return false;
 }
 
@@ -589,6 +591,7 @@ function isShowFavorite(group) {
 function buildFavoritePayloadForMovie(item) {
   return {
     isShow: false,
+    mediaId: item?.id || '',
     mediaPath: item?.path || '',
     mediaName: item?.data?.title || item?.name || 'Movie',
     tmdbId: item?.data?.id ?? item?.tmdbId ?? null,
@@ -598,6 +601,7 @@ function buildFavoritePayloadForMovie(item) {
 function buildFavoritePayloadForShow(group) {
   return {
     isShow: true,
+    showId: group?.id || '',
     showKey: group?.key || '',
     mediaName: group?.data?.name || group?.name || 'TV Show',
     tmdbId: group?.data?.id ?? group?.tmdbId ?? null,
@@ -2542,6 +2546,7 @@ function updateWatchProgressForPath(filePath, currentTime, duration, forceComple
 
   if (currentAccountUser && window.api?.saveAccountWatchProgress) {
     window.api.saveAccountWatchProgress({
+      mediaId: sourceItem?.id || '',
       mediaPath: filePath,
       mediaName: sourceItem?.name || sourceItem?.data?.title || sourceItem?.data?.name || '',
       isShow: !!sourceItem?.isShow,
@@ -4088,7 +4093,7 @@ async function refreshAccountState({ mergeProgress = false, persistLibrary = fal
   const session = await window.api.getCurrentAccountUser();
   currentAccountUser = session?.user || null;
   if (desktopAppContext.sharedServerConfigured) {
-    desktopAppContext.useSharedLibrary = !currentAccountUser?.isAdmin;
+    desktopAppContext.useSharedLibrary = true;
   }
   refreshAdminUi();
 
@@ -4750,7 +4755,7 @@ function showSettings() {
   const content = document.getElementById('content');
   if (!content) return;
   const activeAppTheme = getAppTheme();
-  const adminToolsMarkup = isCurrentUserAdmin()
+  let adminToolsMarkup = isCurrentUserAdmin()
     ? `
           <div class="settings-section">
             <button id="importLibraryBtn" class="settings-btn secondary">
@@ -4826,6 +4831,19 @@ function showSettings() {
             </div>
           </div>
     `;
+
+  if (isCurrentUserAdmin() && isSharedLibraryMode()) {
+    adminToolsMarkup = `
+      <div class="settings-section cinema-control-panel">
+        <div class="settings-theme-header">
+          <span>Server Library</span>
+          <small>Media folders are managed on the server. Local file import is disabled.</small>
+        </div>
+        <button id="serverRescanBtn" class="settings-btn secondary">Rescan Server Library</button>
+        <div id="serverScanStatus" class="settings-status">Checking server scan status...</div>
+      </div>
+    `;
+  }
 
   content.innerHTML = `
     <div class="settings-page settings-lounge-page">
@@ -4948,6 +4966,44 @@ function showSettings() {
   document.getElementById('featuredAutoplayToggle')?.addEventListener('change', (event) => {
     setFeaturedAutoplayEnabled(!!event.target.checked);
   });
+
+  const serverRescanBtn = document.getElementById('serverRescanBtn');
+  const serverScanStatus = document.getElementById('serverScanStatus');
+  const refreshServerScanStatus = async () => {
+    if (!serverScanStatus || !window.api?.getServerLibraryScanStatus) return false;
+    const result = await window.api.getServerLibraryScanStatus();
+    if (!result?.ok) {
+      serverScanStatus.textContent = result?.error || 'Server scan status is unavailable.';
+      if (serverRescanBtn) serverRescanBtn.disabled = false;
+      return false;
+    }
+    const scan = result.status || {};
+    if (serverRescanBtn) serverRescanBtn.disabled = !!scan.running;
+    serverScanStatus.textContent = scan.running
+      ? `Scanning ${scan.filesScanned || 0} file(s)...`
+      : `Last scan: ${scan.filesScanned || 0} checked, ${scan.new || 0} new, ${scan.updated || 0} updated.`;
+    return !!scan.running;
+  };
+  serverRescanBtn?.addEventListener('click', async () => {
+    serverRescanBtn.disabled = true;
+    serverScanStatus.textContent = 'Starting server scan...';
+    const result = await window.api.scanServerLibrary?.();
+    if (!result?.ok) {
+      serverScanStatus.textContent = result?.error || 'Could not start server scan.';
+      serverRescanBtn.disabled = false;
+      return;
+    }
+    const poll = async () => {
+      const running = await refreshServerScanStatus();
+      if (running && serverScanStatus.isConnected) setTimeout(poll, 1500);
+      else if (serverScanStatus.isConnected) {
+        const loaded = await window.api.getLibrary();
+        currentLibrary = adoptLibraryItems(loaded);
+      }
+    };
+    setTimeout(poll, 500);
+  });
+  refreshServerScanStatus();
 
   const setStatus = () => {};
 
@@ -5508,6 +5564,7 @@ function renderDeleteList(items, labelFn, onDelete) {
 }
 
 function getShowKeyForFile(file) {
+  if (file?.showId) return String(file.showId);
   const tmdbId = Number.parseInt(file?.data?.id, 10);
   if (tmdbId) return `tmdb:${tmdbId}`;
   const showName = file.showName || normalizeShowName(file.name);
@@ -5544,6 +5601,7 @@ function groupShows(library) {
 
     if (!map.has(key)) {
       map.set(key, {
+        id: file.showId || key,
         key,
         name: showName || file.name,
         data: file.data || null,

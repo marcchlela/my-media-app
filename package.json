@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "server": "node server.js",
+    "test": "node --test --test-concurrency=1",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win nsis",
@@ -14,12 +15,14 @@
   "keywords": [],
   "author": "User",
   "license": "ISC",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "devDependencies": {
     "electron": "^41.1.1",
     "electron-builder": "^26.8.1"
   },
   "dependencies": {
-    "cors": "^2.8.6",
     "express": "^5.2.1",
     "ffprobe-static": "^3.1.0"
   },
@@ -38,6 +41,7 @@
       "env-config.js",
       "index.html",
       "main.js",
+      "media-utils.js",
       "myflix-cinema-designs-v2/**/*",
       "myflix-electric/**/*",
       "!myflix-electric/assets/generated-3d/sources/**/*",

@@ -208,8 +208,44 @@ function absolutizeSharedLibraryItem(item) {
     : [];
   return {
     ...item,
+    // The renderer's standalone model still expects a local identity field.
+    // In server mode this is the opaque catalog ID, never a filesystem path.
+    path: item.id,
+    data: item.isShow ? {
+      id: item.tmdbId,
+      name: item.showName || item.title,
+      poster_path: item.posterPath,
+      backdrop_path: item.backdropPath,
+      overview: item.overview,
+      first_air_date: item.releaseDate,
+      vote_average: item.rating,
+      episode_run_time: item.runtime ? [item.runtime] : [],
+      genres: (item.genreNames || []).map((name) => ({ name })),
+    } : {
+      id: item.tmdbId,
+      title: item.title,
+      poster_path: item.posterPath,
+      backdrop_path: item.backdropPath,
+      overview: item.overview,
+      release_date: item.releaseDate,
+      vote_average: item.rating,
+      genres: (item.genreNames || []).map((name) => ({ name })),
+    },
     streamUrl,
     subtitles,
+  };
+}
+
+function adaptSharedAccountPayload(payload = {}) {
+  const mediaId = payload.mediaId || payload.mediaPath || payload.path || '';
+  let showId = payload.showId || '';
+  if (!showId && String(payload.showKey || '').startsWith('show:')) {
+    showId = String(payload.showKey).slice(5);
+  }
+  return {
+    ...payload,
+    ...(mediaId ? { mediaId } : {}),
+    ...(showId ? { showId } : {}),
   };
 }
 
@@ -581,26 +617,32 @@ async function handleSelectMediaFromCd() {
 }
 
 ipcMain.handle('select-media', async () => {
+  if (hasSharedServer()) return [];
   if (!await isCurrentUserAdmin()) return [];
   return handleSelectMedia();
 });
 ipcMain.handle('select-folder', async () => {
+  if (hasSharedServer()) return [];
   if (!await isCurrentUserAdmin()) return [];
   return handleSelectMedia();
 });
 ipcMain.handle('select-media-from-cd', async () => {
+  if (hasSharedServer()) return [];
   if (!await isCurrentUserAdmin()) return [];
   return handleSelectMediaFromCd();
 });
 ipcMain.handle('select-subtitles', async () => {
+  if (hasSharedServer()) return [];
   if (!await isCurrentUserAdmin()) return [];
   return handleSelectSubtitles();
 });
 ipcMain.handle('select-poster', async () => {
+  if (hasSharedServer()) return null;
   if (!await isCurrentUserAdmin()) return null;
   return handleSelectPoster();
 });
 ipcMain.handle('media:probe', async (_event, filePath) => {
+  if (hasSharedServer()) return { ok: false, error: 'Media inspection runs on the shared server.' };
   if (!await isCurrentUserAdmin()) {
     return { ok: false, error: 'Administrator access is required.' };
   }
@@ -752,20 +794,18 @@ ipcMain.handle('app:get-context', async () => {
     ok: true,
     sharedServerConfigured: hasSharedServer(),
     sharedServerUrl: SHARED_SERVER_URL,
-    useSharedLibrary: hasSharedServer() && !session.user?.isAdmin,
+    useSharedLibrary: hasSharedServer(),
   };
 });
 
 ipcMain.handle('library:read', async () => {
   if (hasSharedServer()) {
     const session = await getCurrentSharedAccountSession();
-    if (!session.user?.isAdmin) {
-      try {
-        return await fetchSharedLibrary(session.token);
-      } catch (err) {
-        console.error('Error reading shared library:', err);
-        return [];
-      }
+    try {
+      return await fetchSharedLibrary(session.token);
+    } catch (err) {
+      console.error('Error reading shared library:', err);
+      return [];
     }
   }
   try {
@@ -780,9 +820,7 @@ ipcMain.handle('library:read', async () => {
 });
 
 ipcMain.handle('library:write', async (_event, items) => {
-  if (hasSharedServer() && !await isCurrentUserAdmin()) {
-    return false;
-  }
+  if (hasSharedServer()) return false;
   try {
     const filePath = libraryPath();
     fs.writeFileSync(filePath, JSON.stringify(stripPerUserLibraryFields(items), null, 2));
@@ -1024,9 +1062,7 @@ ipcMain.handle('account:merge-library-progress', async (_event, items) => {
       return {
         ok: true,
         user: session.user,
-        items: session.user.isAdmin
-          ? mergeRemoteLibraryProgressIntoItems(items, remoteLibrary)
-          : remoteLibrary,
+        items: remoteLibrary,
       };
     } catch (err) {
       return { ok: false, user: session.user, items: Array.isArray(items) ? items : [], error: err.message };
@@ -1071,9 +1107,7 @@ ipcMain.handle('account:refresh-library-progress', async (_event, items) => {
       return {
         ok: true,
         user: session.user,
-        items: session.user.isAdmin
-          ? mergeRemoteLibraryProgressIntoItems(items, remoteLibrary)
-          : remoteLibrary,
+        items: remoteLibrary,
       };
     } catch (err) {
       return {
@@ -1116,7 +1150,7 @@ ipcMain.handle('account:add-favorite', async (_event, payload) => {
       const { response, payload: remotePayload } = await requestSharedServerJson('/api/account/favorite', {
         method: 'POST',
         token: session.token,
-        body: payload || {},
+        body: adaptSharedAccountPayload(payload),
       });
       if (!response.ok) {
         return remotePayload || { ok: false, authenticated: true, error: `HTTP ${response.status}` };
@@ -1150,7 +1184,7 @@ ipcMain.handle('account:remove-favorite', async (_event, payload) => {
       const { response, payload: remotePayload } = await requestSharedServerJson('/api/account/favorite', {
         method: 'DELETE',
         token: session.token,
-        body: payload || {},
+        body: adaptSharedAccountPayload(payload),
       });
       if (!response.ok) {
         return remotePayload || { ok: false, authenticated: true, error: `HTTP ${response.status}` };
@@ -1181,7 +1215,7 @@ ipcMain.handle('account:save-poster-override', async (_event, payload) => {
       const { response, payload: remotePayload } = await requestSharedServerJson('/api/account/poster', {
         method: 'POST',
         token: session.token,
-        body: payload || {},
+        body: adaptSharedAccountPayload(payload),
       });
       if (!response.ok) {
         return remotePayload || { ok: false, authenticated: true, error: `HTTP ${response.status}` };
@@ -1215,7 +1249,7 @@ ipcMain.handle('account:clear-poster-override', async (_event, payload) => {
       const { response, payload: remotePayload } = await requestSharedServerJson('/api/account/poster', {
         method: 'DELETE',
         token: session.token,
-        body: payload || {},
+        body: adaptSharedAccountPayload(payload),
       });
       if (!response.ok) {
         return remotePayload || { ok: false, authenticated: true, error: `HTTP ${response.status}` };
@@ -1246,7 +1280,7 @@ ipcMain.handle('account:save-watch-progress', async (_event, payload) => {
       const { response, payload: remotePayload } = await requestSharedServerJson('/api/account/progress', {
         method: 'POST',
         token: session.token,
-        body: payload || {},
+        body: adaptSharedAccountPayload(payload),
       });
       if (!response.ok) {
         return remotePayload || { ok: false, authenticated: true, error: `HTTP ${response.status}` };
@@ -1284,15 +1318,13 @@ ipcMain.handle('account:sync-library-progress', async (_event, items) => {
     let synced = 0;
     if (Array.isArray(items)) {
       for (const item of items) {
-        if (!item?.path || !item?.watchProgress) continue;
+        if (!item?.id || !item?.watchProgress) continue;
         try {
           const { response } = await requestSharedServerJson('/api/account/progress', {
             method: 'POST',
             token: session.token,
             body: {
-              mediaPath: item.path,
-              mediaName: item.name || item.data?.title || item.data?.name || '',
-              isShow: !!item.isShow,
+              mediaId: item.id,
               ...item.watchProgress,
             },
           });
@@ -1321,6 +1353,35 @@ ipcMain.handle('account:sync-library-progress', async (_event, items) => {
     authenticated: true,
     synced,
   };
+});
+
+ipcMain.handle('server:library-scan', async () => {
+  if (!hasSharedServer()) return { ok: false, error: 'Shared server mode is not configured.' };
+  const session = await getCurrentSharedAccountSession();
+  if (!session.user?.isAdmin || !session.token) return { ok: false, error: 'Administrator access required.' };
+  try {
+    const { response, payload } = await requestSharedServerJson('/api/admin/library/scan', {
+      method: 'POST',
+      token: session.token,
+    });
+    return payload || { ok: response.ok };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Shared server unavailable.' };
+  }
+});
+
+ipcMain.handle('server:library-scan-status', async () => {
+  if (!hasSharedServer()) return { ok: false, error: 'Shared server mode is not configured.' };
+  const session = await getCurrentSharedAccountSession();
+  if (!session.user?.isAdmin || !session.token) return { ok: false, error: 'Administrator access required.' };
+  try {
+    const { response, payload } = await requestSharedServerJson('/api/admin/library/scan/status', {
+      token: session.token,
+    });
+    return payload || { ok: response.ok };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Shared server unavailable.' };
+  }
 });
 
 app.whenReady().then(createWindow);
