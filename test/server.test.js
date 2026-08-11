@@ -66,6 +66,69 @@ test('health and library responses are safe', async () => {
   assert.equal(JSON.stringify(library).includes(root), false);
 });
 
+test('public capabilities expose client-safe playback support', async () => {
+  const response = await fetch(`${baseUrl}/api/capabilities`);
+  const capabilities = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(capabilities.ok, true);
+  assert.equal(capabilities.hlsAvailable, false);
+  assert.equal(capabilities.playback.default, 'direct');
+  assert.equal(capabilities.playback.compatibilityFallback, false);
+  assert.equal(typeof capabilities.serverVersion, 'string');
+  assert.equal(JSON.stringify(capabilities).includes(root), false);
+});
+
+test('HLS API forwards compatibility, adaptive, and manual mode requests', async () => {
+  const starts = [];
+  const statuses = [];
+  const fakeHlsManager = {
+    playbackOptions: () => ({ directPlay: true, hlsAvailable: true, qualities: [{ label: '720p', height: 720 }] }),
+    start: (item, input) => {
+      starts.push({ mediaId: item.id, ...input });
+      const mode = input.mode || 'adaptive';
+      const cacheKey = mode === 'manual' ? `manual-${input.quality}` : mode === 'compatibility' ? 'compatibility-720' : 'adaptive';
+      return { state: 'ready', progress: 100, mode, cacheKey, qualities: mode === 'adaptive' ? ['720p', '480p', '360p'] : ['720p'], masterUrl: `/api/media/${item.id}/hls/${cacheKey}/master.m3u8` };
+    },
+    getStatus: (mediaId, input) => {
+      statuses.push({ mediaId, ...input });
+      return { state: 'ready', progress: 100, cacheKey: input.cacheKey, masterUrl: `/api/media/${mediaId}/hls/${input.cacheKey}/master.m3u8` };
+    },
+    resolveAsset: () => null,
+    clearCache: async () => {},
+  };
+  const created = createApp({
+    scanner: { getStatus: () => ({ state: 'idle' }), getSources: () => [] },
+    hlsManager: fakeHlsManager,
+    tools: {
+      ffmpeg: { available: true, path: 'ffmpeg' }, fingerprint: { available: false, path: 'fpcalc' },
+      encoders: {}, gpuDeviceAvailable: false, recommendedEncoder: 'libx264',
+    },
+  });
+  const listener = await new Promise((resolve) => {
+    const instance = created.app.listen(0, '127.0.0.1', () => resolve(instance));
+  });
+  const url = `http://127.0.0.1:${listener.address().port}`;
+  try {
+    const [item] = await fetch(`${url}/api/library`).then((response) => response.json());
+    for (const body of [{ mode: 'compatibility' }, { mode: 'adaptive' }, { mode: 'manual', quality: 720 }]) {
+      const response = await fetch(`${url}/api/media/${item.id}/hls`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 200);
+    }
+    const status = await fetch(`${url}/api/media/${item.id}/hls/status?cacheKey=compatibility-720`);
+    assert.equal(status.status, 200);
+    assert.deepEqual(starts.map(({ mode, quality }) => ({ mode, quality })), [
+      { mode: 'compatibility', quality: undefined },
+      { mode: 'adaptive', quality: undefined },
+      { mode: 'manual', quality: 720 },
+    ]);
+    assert.equal(statuses[0].cacheKey, 'compatibility-720');
+  } finally {
+    await new Promise((resolve) => listener.close(resolve));
+  }
+});
+
 test('mobile and desktop serve the same responsive Electric Lounge client', async () => {
   const [desktop, mobile] = await Promise.all([
     fetch(`${baseUrl}/desktop`).then((response) => response.text()),
@@ -261,10 +324,17 @@ test('stream heartbeats appear only in the admin stream monitor', async () => {
     body: JSON.stringify({ mediaId: movie.id, title: movie.title, mode: 'direct', quality: 'Original', position: 12, duration: 60 }),
   }).then((response) => response.json());
   assert.match(heartbeat.sessionId, /^stream_/);
+  await fetch(`${baseUrl}/api/playback/session`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${normalSessionToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: heartbeat.sessionId, mediaId: movie.id, title: movie.title, mode: 'hls-fallback', quality: '720p', position: 15, duration: 60 }),
+  });
   assert.equal((await fetch(`${baseUrl}/api/admin/streams`, { headers: { Authorization: `Bearer ${normalSessionToken}` } })).status, 403);
   const admin = await fetch(`${baseUrl}/api/admin/streams`, { headers: { Authorization: `Bearer ${adminSessionToken}` } }).then((response) => response.json());
   assert.equal(admin.streams.length, 1);
   assert.equal(admin.streams[0].userName, 'Updated Viewer');
+  assert.equal(admin.streams[0].mode, 'hls-fallback');
+  assert.equal(admin.streams[0].quality, '720p');
 });
 
 test('title suggestions are account-scoped and reviewable by administrators', async () => {

@@ -21,7 +21,7 @@ class StreamManager {
       ip: context.ip || '',
       mediaId: String(input.mediaId || existing?.mediaId || ''),
       title: String(input.title || existing?.title || 'Unknown title').slice(0, 180),
-      mode: ['direct', 'hls-auto', 'hls-manual'].includes(input.mode) ? input.mode : (existing?.mode || 'direct'),
+      mode: ['direct', 'hls-auto', 'hls-manual', 'hls-fallback'].includes(input.mode) ? input.mode : (existing?.mode || 'direct'),
       quality: String(input.quality || existing?.quality || 'Original').slice(0, 30),
       position: Math.max(0, Number(input.position) || 0),
       duration: Math.max(0, Number(input.duration) || 0),

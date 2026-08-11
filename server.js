@@ -78,6 +78,7 @@ const CUSTOM_POSTER_DIR = path.join(DATA_DIR, 'custom-posters');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const TMDB_API_BASE = 'https://api.themoviedb.org/3';
 const TMDB_API_KEY = resolveTmdbApiKey();
+const SERVER_VERSION = require('./package.json').version;
 
 function parseCookies(headerValue) {
   const cookies = {};
@@ -422,6 +423,16 @@ function createApp(options = {}) {
     }
   });
 
+  app.get('/api/capabilities', (_req, res) => res.json({
+    ok: true,
+    serverVersion: SERVER_VERSION,
+    hlsAvailable: !!tools.ffmpeg?.available,
+    ffmpegAvailable: !!tools.ffmpeg?.available,
+    signupAllowed: ALLOW_SIGNUP,
+    authRequired: REQUIRE_AUTH,
+    playback: { default: 'direct', compatibilityFallback: !!tools.ffmpeg?.available },
+  }));
+
   app.get('/api/account/me', (req, res) => res.json({
     ok: true,
     authenticated: !!req.account?.user,
@@ -536,7 +547,7 @@ function createApp(options = {}) {
     if (!item || !item.available || !item.source_available) return res.sendStatus(404);
     if (!isPathInsideRoot(item.file_path, item.source_root)) return res.status(403).json({ error: 'Invalid catalog path.' });
     try {
-      const status = hlsManager.start(item);
+      const status = hlsManager.start(item, req.body || {});
       return res.status(status.state === 'ready' ? 200 : 202).json({ ok: true, status });
     } catch (err) {
       return res.status(503).json({ ok: false, error: err.message });
@@ -545,13 +556,27 @@ function createApp(options = {}) {
   app.get('/api/media/:id/hls/status', optionalLibraryAuth, (req, res) => {
     const item = getPrivateMedia(String(req.params.id || ''));
     if (!item) return res.sendStatus(404);
-    return res.json({ ok: true, status: hlsManager.getStatus(item.id) });
+    return res.json({ ok: true, status: hlsManager.getStatus(item.id, req.query || {}) });
   });
   app.get('/api/media/:id/hls/master.m3u8', optionalLibraryAuth, (req, res) => {
     const item = getPrivateMedia(String(req.params.id || ''));
     const asset = item && hlsManager.resolveAsset(item.id, ['master.m3u8']);
     if (!asset) return res.sendStatus(404);
     return res.type('application/vnd.apple.mpegurl').sendFile(asset);
+  });
+  app.get('/api/media/:id/hls/:cacheKey/master.m3u8', optionalLibraryAuth, (req, res) => {
+    const item = getPrivateMedia(String(req.params.id || ''));
+    const asset = item && hlsManager.resolveAsset(item.id, req.params.cacheKey, ['master.m3u8']);
+    if (!asset) return res.sendStatus(404);
+    return res.type('application/vnd.apple.mpegurl').sendFile(asset);
+  });
+  app.get('/api/media/:id/hls/:cacheKey/:quality/:asset', optionalLibraryAuth, (req, res) => {
+    if (!/^\d+p$/.test(String(req.params.quality || '')) || !/^(?:index\.m3u8|segment_\d{5}\.ts)$/.test(String(req.params.asset || ''))) return res.sendStatus(400);
+    const item = getPrivateMedia(String(req.params.id || ''));
+    const asset = item && hlsManager.resolveAsset(item.id, req.params.cacheKey, [req.params.quality, req.params.asset]);
+    if (!asset) return res.sendStatus(404);
+    const contentType = req.params.asset.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t';
+    return res.type(contentType).sendFile(asset);
   });
   app.get('/api/media/:id/hls/:quality/:asset', optionalLibraryAuth, (req, res) => {
     if (!/^\d+p$/.test(String(req.params.quality || '')) || !/^(?:index\.m3u8|segment_\d{5}\.ts)$/.test(String(req.params.asset || ''))) return res.sendStatus(400);

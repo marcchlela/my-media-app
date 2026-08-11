@@ -2644,6 +2644,345 @@ body[data-app-theme="electric-lounge"] .player-stage:-webkit-full-screen .fullsc
   display: inline-flex;
 }
 
+/* Mobile Electric Lounge: native-feeling navigation and compact cinema composition. */
+.mobile-details-disclosure > summary { display: none; }
+.mobile-details-disclosure > .details-meta-grid { display: grid; }
+
+@media (max-width: 700px) {
+  :root { --mobile-card-width: clamp(136px, 42vw, 168px); }
+
+  body[data-app-theme="electric-lounge"] { overflow-x: hidden; }
+  body[data-app-theme="electric-lounge"] .app-shell {
+    min-height: 100dvh;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+  body[data-app-theme="electric-lounge"] .navbar {
+    width: 100%;
+    padding: 14px 12px 13px;
+    border-bottom: 1px solid #6f4924;
+    background: #160a08;
+  }
+  body[data-app-theme="electric-lounge"] .navbar::after { display: none; }
+  body[data-app-theme="electric-lounge"] .logo { display: none; }
+  body[data-app-theme="electric-lounge"] .nav-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+  body[data-app-theme="electric-lounge"] .search {
+    order: 1;
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 44px;
+    padding-inline: 14px;
+  }
+  body[data-app-theme="electric-lounge"] .mobile-filters {
+    order: 2;
+    grid-column: 1 / -1;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+  body[data-app-theme="electric-lounge"] .mobile-select { width: 100%; min-width: 0; height: 42px; }
+  body[data-app-theme="electric-lounge"] .lounge-top-action {
+    order: 3;
+    width: 100%;
+    height: 42px;
+    justify-content: center;
+    padding-inline: 10px;
+  }
+  body[data-app-theme="electric-lounge"] .lounge-top-action span { display: inline; }
+
+  body[data-app-theme="electric-lounge"] .app-body { display: block; }
+  body[data-app-theme="electric-lounge"] .sidebar {
+    position: fixed;
+    z-index: 28;
+    inset: auto 0 0;
+    width: 100%;
+    height: calc(68px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0;
+    padding: 5px 4px env(safe-area-inset-bottom);
+    overflow: hidden;
+    border: 0;
+    border-top: 1px solid #9b6d34;
+    background: #130806;
+    box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.48);
+  }
+  body[data-app-theme="electric-lounge"] .sidebar::after,
+  body[data-app-theme="electric-lounge"] .side-divider { display: none; }
+  body[data-app-theme="electric-lounge"] .nav-btn {
+    min-width: 0;
+    width: 100%;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 2px;
+    border: 0;
+    border-top: 2px solid transparent;
+    border-radius: 0;
+    font-size: 9px;
+    text-align: center;
+  }
+  body[data-app-theme="electric-lounge"] .nav-btn::before { display: none; }
+  body[data-app-theme="electric-lounge"] .nav-btn.active {
+    border-top-color: #d5aa5d;
+    color: #f6dfb4;
+    background: linear-gradient(180deg, rgba(139, 30, 39, 0.48), transparent 85%);
+    box-shadow: none;
+  }
+  body[data-app-theme="electric-lounge"] .nav-icon,
+  body[data-app-theme="electric-lounge"] .nav-icon svg { width: 21px; height: 21px; }
+  body[data-app-theme="electric-lounge"] .nav-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body[data-app-theme="electric-lounge"] .main { width: 100%; padding: 17px 12px 30px; overflow: visible; }
+
+  body[data-app-theme="electric-lounge"] .electric-featured {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(105px, 32vw);
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    overflow: visible;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured::before,
+  body[data-app-theme="electric-lounge"] .electric-featured::after { display: none; }
+  body[data-app-theme="electric-lounge"] .electric-featured-note {
+    min-width: 0;
+    min-height: 218px;
+    padding: 24px 21px;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured-note h3 { font-size: clamp(20px, 6vw, 27px); }
+  body[data-app-theme="electric-lounge"] .electric-featured-description {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured-posters {
+    min-width: 0;
+    display: block;
+    overflow: visible;
+    padding: 0;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured-poster,
+  body[data-app-theme="electric-lounge"] .electric-featured-poster:not(.is-main) {
+    width: 100%;
+    min-width: 0;
+    padding: 46px 0 25px;
+    opacity: 1;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured-poster:nth-child(n + 2) { display: none; }
+  body[data-app-theme="electric-lounge"] .electric-featured-light { width: 72px; height: 48px; }
+  body[data-app-theme="electric-lounge"] .electric-featured-light::after { left: -24px; top: 27px; width: 120px; height: 78px; }
+  body[data-app-theme="electric-lounge"] .electric-featured-caption { font-size: 9px; }
+
+  body[data-app-theme="electric-lounge"] .home-shelf-actions { gap: 6px; }
+  body[data-app-theme="electric-lounge"] .home-rail-btn { display: none !important; }
+  body[data-app-theme="electric-lounge"] .home-see-all {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    padding: 0 10px;
+    border: 1px solid #785126;
+    border-radius: 3px;
+    color: #dfbf83;
+    background: #1b0c09;
+    font-size: 10px;
+  }
+  body[data-app-theme="electric-lounge"] .home-horizontal-rail { gap: 12px; padding: 7px 2px 13px; }
+  body[data-app-theme="electric-lounge"] .grid {
+    grid-template-columns: repeat(2, var(--mobile-card-width));
+    justify-content: space-between;
+    gap: 21px 12px;
+  }
+  body[data-app-theme="electric-lounge"] .electric-media-card,
+  body[data-app-theme="electric-lounge"] .home-horizontal-rail .electric-media-card {
+    width: var(--mobile-card-width);
+    min-width: var(--mobile-card-width);
+    max-width: var(--mobile-card-width);
+    flex: 0 0 var(--mobile-card-width);
+    padding-top: 39px;
+  }
+  body[data-app-theme="electric-lounge"] .electric-media-card .card-picture-light { width: 70px; height: 43px; }
+  body[data-app-theme="electric-lounge"] .electric-media-card .card-picture-light::after { left: -24px; top: 24px; width: 118px; height: 77px; }
+  body[data-app-theme="electric-lounge"] .electric-media-card .card-poster-wrap,
+  body[data-app-theme="electric-lounge"] .electric-featured-frame {
+    overflow: hidden;
+    border: 7px solid transparent;
+    border-image: url("/electric-assets/brass-frame-v2-web.webp") 56 / 8px / 0 stretch;
+    background: #160b08;
+  }
+  body[data-app-theme="electric-lounge"] .electric-media-card .poster { object-fit: cover; }
+
+  body[data-app-theme="electric-lounge"] .detail-card.electric-private-room {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 19px;
+    padding: 18px;
+    background: linear-gradient(180deg, #20100c, #100705);
+  }
+  body[data-app-theme="electric-lounge"] .detail-poster-frame { width: min(190px, 55vw); margin-inline: auto; }
+  body[data-app-theme="electric-lounge"] .detail-body { display: flex; flex-direction: column; padding: 0; }
+  body[data-app-theme="electric-lounge"] .detail-title-row { order: 1; align-items: flex-start; flex-wrap: wrap; }
+  body[data-app-theme="electric-lounge"] .detail-title { width: 100%; font-size: 29px; }
+  body[data-app-theme="electric-lounge"] .detail-text { order: 2; margin-top: 10px; font-size: 14px; }
+  body[data-app-theme="electric-lounge"] .detail-separator { display: none; }
+  body[data-app-theme="electric-lounge"] .detail-body > .actions { order: 3; margin: 17px 0 0; }
+  body[data-app-theme="electric-lounge"] .mobile-details-disclosure {
+    order: 4;
+    margin-top: 15px;
+    border: 1px solid #68451f;
+    border-radius: 3px;
+    background: #140806;
+  }
+  body[data-app-theme="electric-lounge"] .mobile-details-disclosure > summary {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 13px;
+    color: #e8d2aa;
+    list-style: none;
+  }
+  body[data-app-theme="electric-lounge"] .mobile-details-disclosure > summary::-webkit-details-marker { display: none; }
+  body[data-app-theme="electric-lounge"] .details-disclosure-icon {
+    width: 9px;
+    height: 9px;
+    border-right: 2px solid #d0a35a;
+    border-bottom: 2px solid #d0a35a;
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 180ms ease;
+  }
+  body[data-app-theme="electric-lounge"] .mobile-details-disclosure[open] .details-disclosure-icon { transform: rotate(225deg) translate(-2px, -2px); }
+  body[data-app-theme="electric-lounge"] .mobile-details-disclosure > .details-meta-grid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+    padding: 0 10px 10px;
+  }
+  body[data-app-theme="electric-lounge"] .detail-body > .actions > button:not(.favorite-toggle) { flex: 1 1 112px; }
+  body[data-app-theme="electric-lounge"] .favorite-toggle {
+    width: 44px;
+    min-width: 44px;
+    flex: 0 0 44px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+  }
+  body[data-app-theme="electric-lounge"] .favorite-toggle-icon { display: block; margin: 0; line-height: 1; }
+  body[data-app-theme="electric-lounge"] .favorite-toggle.active {
+    color: #fff4e3;
+    border-color: #da7a78;
+    background: linear-gradient(#b72d36, #7b141c);
+    box-shadow: 0 5px 14px rgba(121, 15, 24, 0.42);
+  }
+
+  body[data-app-theme="electric-lounge"] .episode-row {
+    min-height: 106px;
+    display: grid;
+    grid-template-columns: 106px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 8px 10px;
+    padding: 9px;
+  }
+  body[data-app-theme="electric-lounge"] .episode-thumb-wrap {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    width: 106px;
+    min-width: 106px;
+    aspect-ratio: 16 / 9;
+    align-self: start;
+  }
+  body[data-app-theme="electric-lounge"] .episode-left { grid-column: 2 / 4; grid-row: 1; gap: 5px; padding: 0; }
+  body[data-app-theme="electric-lounge"] .episode-label { font-size: 13px; }
+  body[data-app-theme="electric-lounge"] .episode-overview { max-height: 2.8em; font-size: 10px; line-height: 1.4; }
+  body[data-app-theme="electric-lounge"] .episode-meta {
+    grid-column: 2;
+    grid-row: 2;
+    width: auto;
+    min-width: 0;
+    justify-content: flex-start;
+    align-self: center;
+    gap: 5px;
+  }
+  body[data-app-theme="electric-lounge"] .episode-meta .rating-number,
+  body[data-app-theme="electric-lounge"] .episode-meta-note,
+  body[data-app-theme="electric-lounge"] .episode-runtime { font-size: 9px; }
+  body[data-app-theme="electric-lounge"] .episode-meta .star { font-size: 10px; }
+  body[data-app-theme="electric-lounge"] .episode-play {
+    grid-column: 3;
+    grid-row: 2;
+    min-width: 58px;
+    height: 32px;
+    margin: 0;
+    padding: 0 9px;
+    font-size: 10px;
+  }
+
+  body[data-app-theme="electric-lounge"] .account-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body[data-app-theme="electric-lounge"] .account-actions > button { width: 100%; margin: 0; }
+
+  body[data-app-theme="electric-lounge"] .player-view { padding: 0; background: #0a0504; }
+  body[data-app-theme="electric-lounge"] .player-panel {
+    width: 100%;
+    min-height: 100dvh;
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    aspect-ratio: auto;
+    background: radial-gradient(circle at center, #24100c, #080403 68%);
+  }
+  body[data-app-theme="electric-lounge"] .player-header {
+    position: static;
+    padding: 12px;
+    background: #100706;
+  }
+  body[data-app-theme="electric-lounge"] .player-stage {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    margin: auto 0;
+  }
+  body[data-app-theme="electric-lounge"] .player-status {
+    position: static;
+    margin: 10px 16px;
+    text-align: center;
+  }
+  body[data-app-theme="electric-lounge"] .subtitle-controls {
+    position: static;
+    transform: none;
+    margin: 0 auto 14px;
+  }
+  body[data-app-theme="electric-lounge"] .player-stage > .cinema-transition { display: none; }
+
+  .movie-night-wheel { position: relative; }
+  .movie-night-wheel::before { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%); }
+  .movie-night-wheel span { inset: 0; display: grid; place-items: center; pointer-events: none; }
+  .suggestion-selection { grid-template-columns: 1fr; gap: 15px; }
+  .suggestion-selected-poster { width: min(156px, 48vw); justify-self: center; }
+  .suggestion-selected-panel { width: 100%; }
+  .suggestion-selected-heading { align-items: center; text-align: center; }
+}
+
+@media (max-width: 390px) {
+  :root { --mobile-card-width: calc((100vw - 38px) / 2); }
+  body[data-app-theme="electric-lounge"] .electric-featured { grid-template-columns: minmax(0, 1fr) 102px; gap: 8px; padding: 10px; }
+  body[data-app-theme="electric-lounge"] .electric-featured-note { padding: 22px 17px; }
+  body[data-app-theme="electric-lounge"] .episode-row { grid-template-columns: 94px minmax(0, 1fr) auto; }
+  body[data-app-theme="electric-lounge"] .episode-thumb-wrap { width: 94px; min-width: 94px; }
+}
+
 /* Electric Lounge responsive and dialog polish. The same rules serve /desktop and /mobile. */
 body[data-app-theme="electric-lounge"] select {
   appearance: none;
@@ -3407,4 +3746,54 @@ body[data-app-theme="electric-lounge"] .player-stage .fullscreen-player-back {
 body[data-app-theme="electric-lounge"] .player-stage:fullscreen .fullscreen-player-back,
 body[data-app-theme="electric-lounge"] .player-stage:-webkit-full-screen .fullscreen-player-back {
   display: inline-flex;
+}
+
+/* Keep the mobile composition authoritative over earlier desktop refinement passes. */
+@media (max-width: 700px) {
+  body[data-app-theme="electric-lounge"] .lounge-top-action {
+    width: 100%;
+    height: 42px;
+    justify-content: center;
+    padding-inline: 10px;
+  }
+  body[data-app-theme="electric-lounge"] .lounge-top-action span { display: inline; }
+  body[data-app-theme="electric-lounge"] .sidebar { gap: 0; padding: 5px 4px env(safe-area-inset-bottom); }
+  body[data-app-theme="electric-lounge"] .nav-btn {
+    min-width: 0;
+    width: 100%;
+    height: 58px;
+    padding: 4px 2px;
+    border-radius: 0;
+    font-size: 9px;
+  }
+  body[data-app-theme="electric-lounge"] .grid {
+    grid-template-columns: repeat(2, var(--mobile-card-width));
+    justify-content: space-between;
+    gap: 21px 12px;
+  }
+  body[data-app-theme="electric-lounge"] .electric-media-card,
+  body[data-app-theme="electric-lounge"] .home-horizontal-rail .electric-media-card {
+    width: var(--mobile-card-width);
+    min-width: var(--mobile-card-width);
+    max-width: var(--mobile-card-width);
+    flex: 0 0 var(--mobile-card-width);
+    padding-top: 39px;
+  }
+  body[data-app-theme="electric-lounge"] .electric-featured { padding: 14px; }
+  body[data-app-theme="electric-lounge"] .electric-featured-note { min-height: 218px; padding: 24px 21px; }
+  body[data-app-theme="electric-lounge"] .electric-featured-poster,
+  body[data-app-theme="electric-lounge"] .electric-featured-poster:not(.is-main) {
+    width: 100%;
+    min-width: 0;
+    padding: 46px 0 25px;
+  }
+  body[data-app-theme="electric-lounge"] .detail-body > .actions { margin: 17px 0 0; padding-top: 0; border-top: 0; }
+  body[data-app-theme="electric-lounge"] .detail-body > .actions > .favorite-toggle {
+    width: 44px;
+    min-width: 44px;
+    flex: 0 0 44px;
+  }
+  .suggestion-selection { grid-template-columns: 1fr; gap: 15px; padding: 13px; }
+  .suggestion-selected-poster { width: min(156px, 48vw); justify-self: center; }
+  .suggestion-selected-heading { align-items: center; text-align: center; }
 }

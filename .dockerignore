@@ -5,6 +5,7 @@
 .data
 dist
 node_modules
+mobile-client
 test
 myflix-cinema-designs-v2
 myflix-electric/*
