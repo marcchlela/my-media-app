@@ -6,7 +6,7 @@ import { useMyFlix } from '../src/context/MyFlixContext';
 import { colors } from '../src/theme';
 
 export default function ConnectScreen() {
-  const { connect, busy, serverUrl } = useMyFlix();
+  const { connect, enterDemo, demoAvailable, busy, serverUrl } = useMyFlix();
   const [url, setUrl] = useState(serverUrl);
   const [error, setError] = useState('');
 
@@ -14,6 +14,16 @@ export default function ConnectScreen() {
     setError('');
     try {
       await connect(url);
+      router.replace('/(tabs)');
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
+
+  function openDemo() {
+    setError('');
+    try {
+      enterDemo();
       router.replace('/(tabs)');
     } catch (reason) {
       setError((reason as Error).message);
@@ -41,6 +51,7 @@ export default function ConnectScreen() {
           />
           {!!error && <Text style={styles.error}>{error}</Text>}
           <Button label={busy ? 'Testing connection...' : 'Test & Connect'} icon="radio-outline" onPress={submit} disabled={busy} />
+          {demoAvailable && <View style={styles.demoPanel}><Text style={styles.demoLabel}>DEVELOPMENT ONLY</Text><Text style={uiStyles.muted}>Away from the server? Explore a temporary fictional library without connecting or saving account data.</Text><Button label="Explore Demo Library" icon="sparkles-outline" onPress={openDemo} variant="secondary" /></View>}
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -54,4 +65,6 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.gold, letterSpacing: 2, fontSize: 11, fontWeight: '800' },
   heading: { color: colors.text, fontSize: 28, fontWeight: '900' },
   error: { color: colors.danger, lineHeight: 20 },
+  demoPanel: { gap: 12, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 16 },
+  demoLabel: { alignSelf: 'flex-start', color: colors.gold, backgroundColor: '#2c1d14', borderWidth: 1, borderColor: colors.goldDim, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
 });

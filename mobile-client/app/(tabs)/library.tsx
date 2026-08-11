@@ -9,14 +9,14 @@ import { colors } from '../../src/theme';
 type Filter = 'all' | 'movies' | 'shows' | 'favorites';
 
 export default function LibraryScreen() {
-  const { library, serverUrl, api, user } = useMyFlix();
+  const { library, serverUrl, api, user, isDemo } = useMyFlix();
   const [filter, setFilter] = useState<Filter>('all');
   const movies = movieItems(library);
   const shows = groupShows(library);
   const favoriteMovies = movies.filter((item) => item.isFavorite);
   const favoriteShows = shows.filter((show) => show.isFavorite);
   return (
-    <Screen>
+    <Screen demo={isDemo}>
       <Title>Your Library</Title>
       <View style={styles.filters}>{(['all', 'movies', 'shows', ...(user ? ['favorites'] : [])] as Filter[]).map((item) => <Pressable key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item.charAt(0).toUpperCase() + item.slice(1)}</Text></Pressable>)}</View>
       {(filter === 'all' || filter === 'movies') && <MediaRail title="Movies" items={movies} serverUrl={serverUrl} headers={api.mediaHeaders()} />}

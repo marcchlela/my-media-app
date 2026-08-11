@@ -5,10 +5,10 @@ import { Loading, Screen } from '../src/components/ui';
 import { useMyFlix } from '../src/context/MyFlixContext';
 
 export default function EntryScreen() {
-  const { ready, serverUrl } = useMyFlix();
+  const { ready, connected, isDemo } = useMyFlix();
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
   if (!ready) return <Screen scroll={false}><Loading /></Screen>;
-  return <Redirect href={serverUrl ? '/(tabs)' : '/connect'} />;
+  return <Redirect href={connected || isDemo ? '/(tabs)' : '/connect'} />;
 }

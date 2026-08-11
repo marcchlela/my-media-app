@@ -23,15 +23,32 @@ test('native icon exports and source concepts are complete', () => {
   assert.match(expoConfig, /MYFLIX_ICON_VARIANT/);
   assert.match(expoConfig, /icon-\$\{iconVariant\}-1024\.png/);
   assert.match(expoConfig, /iconVariant = process\.env\.MYFLIX_ICON_VARIANT === 'electric' \? 'electric-lounge' : 'general'/);
+  assert.match(expoConfig, /NSAllowsLocalNetworking: true/);
+  assert.doesNotMatch(expoConfig, /NSAllowsArbitraryLoads: true/);
 });
 
-test('web manifest references valid production icon sizes', () => {
+test('web Add to Home Screen manifest and icons are complete', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'web/manifest.webmanifest'), 'utf8'));
   assert.equal(manifest.name, 'MyFlix');
+  assert.equal(manifest.short_name, 'MyFlix');
+  assert.equal(manifest.id, '/mobile');
+  assert.equal(manifest.start_url, '/mobile');
   assert.equal(manifest.display, 'standalone');
+  assert.equal(manifest.theme_color, '#100b0b');
+  assert.equal(manifest.background_color, '#100b0b');
   for (const icon of manifest.icons) {
     const info = pngInfo(icon.src.replace(/^\/web\//, 'web/'));
     assert.equal(`${info.width}x${info.height}`, icon.sizes);
   }
   assert.deepEqual(pngInfo('web/icons/apple-touch-icon.png').width, 180);
+  const html = fs.readFileSync(path.join(root, 'web/index.html'), 'utf8');
+  assert.match(html, /name="viewport"/);
+  assert.match(html, /name="apple-mobile-web-app-capable" content="yes"/);
+  assert.match(html, /rel="apple-touch-icon"[^>]+apple-touch-icon\.png/);
+  assert.match(html, /rel="manifest"[^>]+manifest\.webmanifest/);
+});
+
+test('native toolchain remains outside the server Docker context', () => {
+  const dockerIgnore = fs.readFileSync(path.join(root, '.dockerignore'), 'utf8').split(/\r?\n/).map((line) => line.trim());
+  assert.equal(dockerIgnore.includes('mobile-client'), true);
 });

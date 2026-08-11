@@ -46,3 +46,17 @@ test('expired bearer sessions invoke centralized unauthorized handling', async (
   await assert.rejects(api.library(), /Session expired/);
   assert.equal(cleared, 1);
 });
+
+test('external subtitle text uses bearer authentication without JSON parsing', async () => {
+  let requestHeaders = new Headers();
+  const api = new MyFlixApi({
+    getServerUrl: () => 'https://myflix.test',
+    getToken: () => 'subtitle-session',
+    fetchImpl: (async (_input, init) => {
+      requestHeaders = new Headers(init?.headers);
+      return new Response('WEBVTT\n\n00:00.000 --> 00:01.000\nHello');
+    }) as typeof fetch,
+  });
+  assert.match(await api.subtitleText('media_1', 'subtitle_1'), /^WEBVTT/);
+  assert.equal(requestHeaders.get('Authorization'), 'Bearer subtitle-session');
+});

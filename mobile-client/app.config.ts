@@ -24,7 +24,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       bundleIdentifier: 'com.marcchlela.myflix',
       infoPlist: {
         NSLocalNetworkUsageDescription: 'MyFlix connects to your private home media server.',
-        NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
+        NSAppTransportSecurity: { NSAllowsLocalNetworking: true },
       },
     },
     android: {

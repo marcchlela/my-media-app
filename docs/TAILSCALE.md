@@ -1,6 +1,6 @@
 # Private Tailscale Access
 
-This is a future procedure for `chlela-bunker`; do not run it from the MyFlix container. Tailscale belongs on the Ubuntu host. MyFlix remains private: no Funnel, router port forwarding, public DNS, or public port exposure is required.
+This is a future procedure for `chlela-bunker`; do not run it from the MyFlix container. Tailscale belongs on the Ubuntu host. MyFlix must remain private: do not use Funnel, router port forwarding, public DNS, public sharing links, or public port exposure.
 
 ## Intended path
 
@@ -61,7 +61,7 @@ Native bearer authentication does not depend on cookies, but secure cookies prot
 ## Phone configuration
 
 1. Install Tailscale on iOS or Android.
-2. Sign into the same tailnet and confirm `chlela-bunker` is reachable.
+2. Sign into the same tailnet and confirm `chlela-bunker` is reachable. Family or friends must each be explicitly invited or granted access through the private tailnet policy.
 3. In the native MyFlix client, choose **Change MyFlix Server**.
 4. Enter the exact HTTPS URL printed by `tailscale serve status` without a trailing path.
 5. Test the connection and sign in with the existing MyFlix account.
@@ -71,7 +71,7 @@ If the app cannot connect, confirm both devices are online, MyFlix `/health` wor
 
 ## Stop or reset Serve
 
-Inspect current syntax before changing a production setup. With current Tailscale releases:
+Inspect current syntax before changing the private host setup. With current Tailscale releases:
 
 ```bash
 tailscale serve status

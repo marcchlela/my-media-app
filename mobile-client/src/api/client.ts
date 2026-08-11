@@ -62,6 +62,26 @@ export class MyFlixApi {
     return payload as T;
   }
 
+  async requestText(resource: string): Promise<string> {
+    const token = this.config.getToken();
+    const headers = new Headers();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.absoluteUrl(resource), { headers });
+    } catch {
+      throw new ApiError(CONNECTION_ERROR);
+    }
+    const body = await response.text();
+    if (response.status === 401 && token) await this.config.onUnauthorized?.();
+    if (!response.ok) {
+      let message = '';
+      try { message = (JSON.parse(body) as { error?: string }).error || ''; } catch { /* Plain-text response. */ }
+      throw new ApiError(message || `MyFlix request failed (${response.status}).`, response.status);
+    }
+    return body;
+  }
+
   health() { return this.request<HealthResponse>('/health'); }
   capabilities() { return this.request<Capabilities>('/api/capabilities'); }
   me() { return this.request<AccountMeResponse>('/api/account/me'); }
@@ -100,6 +120,9 @@ export class MyFlixApi {
   }
   subtitleUrl(mediaId: string, subtitleId: string) {
     return this.absoluteUrl(`/api/media/${encodeURIComponent(mediaId)}/subtitles/${encodeURIComponent(subtitleId)}`);
+  }
+  subtitleText(mediaId: string, subtitleId: string) {
+    return this.requestText(`/api/media/${encodeURIComponent(mediaId)}/subtitles/${encodeURIComponent(subtitleId)}`);
   }
   setPoster(payload: { mediaId?: string; showId?: string; tmdbPath: string }) {
     return this.request<{ ok: true }>('/api/account/poster', { method: 'POST', body: payload });

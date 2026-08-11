@@ -3528,8 +3528,8 @@ function renderQualityMenu(options = null) {
   qualityBtn.disabled = false;
   const choices = [
     { label: 'Original', detail: 'Direct play' },
-    { label: 'Auto', detail: 'Best for connection' },
-    ...(options.qualities || []).map((quality) => ({ label: quality.label, detail: 'Adaptive stream' })),
+    { label: 'Auto', detail: 'Adaptive stream' },
+    ...(options.qualities || []).map((quality) => ({ label: quality.label, detail: 'Single server rendition' })),
   ];
   choices.forEach((choice) => {
     const button = document.createElement('button');
@@ -3544,6 +3544,7 @@ function renderQualityMenu(options = null) {
 
 function restoreDirectPlayback() {
   if (!currentPlayerItem) return;
+  qualityRequestToken += 1;
   const resumeAt = Number(player.currentTime) || 0;
   const shouldPlay = !player.paused;
   destroyAdaptivePlayback();
@@ -3635,7 +3636,8 @@ async function selectPlaybackQuality(quality) {
     let status = response.status;
     while (status?.state !== 'ready') {
       if (requestToken !== qualityRequestToken || !currentPlayerItem) return;
-      if (status?.state === 'failed') throw new Error(status.error || 'Adaptive stream generation failed.');
+      if (status?.state === 'failed' || status?.state === 'cancelled') throw new Error(status.error || 'Adaptive stream generation did not complete.');
+      if (!['queued', 'running'].includes(status?.state)) throw new Error('The server no longer has this stream-generation job. Choose the quality again.');
       setPlayerStatus(`${status?.message || 'Generating adaptive stream'}${Number.isFinite(status?.progress) ? ` (${Math.round(status.progress)}%)` : ''}`);
       await new Promise((resolve) => setTimeout(resolve, 1500));
       response = await apiRequest(`/api/media/${encodeURIComponent(currentPlayerItem.id)}/hls/status?cacheKey=${encodeURIComponent(status.cacheKey)}`);
@@ -3665,7 +3667,8 @@ async function startCompatibilityFallback() {
     let status = response.status;
     while (status?.state !== 'ready') {
       if (requestToken !== qualityRequestToken || currentPlayerItem?.id !== mediaId) return;
-      if (status?.state === 'failed') throw new Error(status.error || 'Compatible stream generation failed.');
+      if (status?.state === 'failed' || status?.state === 'cancelled') throw new Error(status.error || 'Compatible stream generation did not complete.');
+      if (!['queued', 'running'].includes(status?.state)) throw new Error('The server no longer has this compatibility job. Try playback again.');
       playbackState = 'hls-preparing';
       setPlayerStatus(`${status?.message || 'Preparing compatible stream'}${Number.isFinite(status?.progress) ? ` (${Math.round(status.progress)}%)` : ''}`);
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -3736,6 +3739,7 @@ function startStreamHeartbeat() {
 
 function openPlayer(item) {
   if (!item.streamUrl) return;
+  qualityRequestToken += 1;
   destroyAdaptivePlayback();
   clearStreamHeartbeat();
   currentPlayerItem = item;
@@ -3901,6 +3905,7 @@ function openPlayer(item) {
 }
 
 function closePlayer() {
+  qualityRequestToken += 1;
   if (Number.isFinite(player.duration) && player.duration > 0) {
     if (currentPlayerItem) {
       saveWatchProgress(currentPlayerItem, player.currentTime, player.duration, false);

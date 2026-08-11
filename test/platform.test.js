@@ -69,6 +69,10 @@ test('HLS cache reuse validates source metadata and rejects unsafe paths', () =>
   fs.mkdirSync(path.join(root, '720p'), { recursive: true });
   fs.writeFileSync(path.join(root, 'master.m3u8'), '#EXTM3U');
   fs.writeFileSync(path.join(root, 'source.json'), JSON.stringify({ fileSize: 400, modifiedAt: 900 }));
+  const adaptiveRoot = manager.rootFor(item.id, 'adaptive');
+  fs.mkdirSync(path.join(adaptiveRoot, '720p'), { recursive: true });
+  fs.writeFileSync(path.join(adaptiveRoot, 'master.m3u8'), '#EXTM3U');
+  fs.writeFileSync(path.join(adaptiveRoot, 'source.json'), JSON.stringify({ fileSize: 400, modifiedAt: 900 }));
 
   assert.equal(manager.start(item, request).state, 'ready');
   assert.equal(manager.resolveAsset(item.id, cacheKey, ['master.m3u8']), path.join(root, 'master.m3u8'));
@@ -77,6 +81,40 @@ test('HLS cache reuse validates source metadata and rejects unsafe paths', () =>
   fs.writeFileSync(path.join(root, 'source.json'), JSON.stringify({ fileSize: 399, modifiedAt: 900 }));
   assert.equal(manager.start(item, request).state, 'queued');
   assert.equal(fs.existsSync(path.join(root, 'master.m3u8')), false);
+  assert.equal(fs.existsSync(path.join(adaptiveRoot, 'master.m3u8')), true);
+  fs.rmSync(cacheDir, { recursive: true, force: true });
+});
+
+test('HLS status honors an exact cache key and does not substitute another variant', () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'myflix-hls-status-'));
+  const manager = new HlsManager({ cacheDir, tools: {}, jobManager: {} });
+  const readyRoot = manager.rootFor('media_1', 'compatibility-480');
+  fs.mkdirSync(path.join(readyRoot, '480p'), { recursive: true });
+  fs.writeFileSync(path.join(readyRoot, 'master.m3u8'), '#EXTM3U');
+
+  const missing = manager.getStatus('media_1', { cacheKey: 'compatibility-720' });
+  assert.equal(missing.state, 'idle');
+  assert.equal(missing.cacheKey, 'compatibility-720');
+  const ready = manager.getStatus('media_1', { cacheKey: 'compatibility-480' });
+  assert.equal(ready.state, 'ready');
+  assert.equal(ready.mode, 'compatibility');
+  fs.rmSync(cacheDir, { recursive: true, force: true });
+});
+
+test('duplicate HLS starts reuse the same queued job', () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'myflix-hls-deduplicate-'));
+  let starts = 0;
+  const manager = new HlsManager({
+    cacheDir,
+    tools: { ffmpeg: { available: true }, encoders: {} },
+    jobManager: { start: () => { starts += 1; return { id: 'job_1' }; } },
+  });
+  const item = { id: 'media_1', title: 'Feature', file_path: path.join(cacheDir, 'source.mkv'), file_size: 12, modified_at: 34, height: 1080 };
+  const first = manager.start(item, { mode: 'compatibility' });
+  const second = manager.start(item, { mode: 'compatibility' });
+  assert.equal(first.cacheKey, 'compatibility-720');
+  assert.equal(second.state, 'queued');
+  assert.equal(starts, 1);
   fs.rmSync(cacheDir, { recursive: true, force: true });
 });
 

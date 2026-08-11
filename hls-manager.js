@@ -157,8 +157,15 @@ class HlsManager {
     const cacheKey = /^(?:adaptive|manual-\d+|compatibility-\d+)$/.test(suppliedKey)
       ? suppliedKey
       : request.mode === 'adaptive' ? 'adaptive' : `${request.mode}-${requestedHeight}`;
+    const cacheMode = cacheKey === 'adaptive' ? 'adaptive' : cacheKey.startsWith('manual-') ? 'manual' : cacheKey.startsWith('compatibility-') ? 'compatibility' : request.mode;
     const exact = this.jobs.get(`${id}:${cacheKey}`);
     if (exact) return this.publicStatus(id, cacheKey, exact);
+    if (suppliedKey) {
+      if (!fs.existsSync(path.join(this.rootFor(id, cacheKey), 'master.m3u8'))) return { state: 'idle', progress: 0, mode: cacheMode, cacheKey };
+      return this.publicStatus(id, cacheKey, {
+        state: 'ready', progress: 100, mode: cacheMode, qualities: this.readQualities(id, cacheKey),
+      });
+    }
     const candidates = request.mode === 'adaptive'
       ? ['adaptive']
       : fs.existsSync(path.join(this.cacheDir, id))

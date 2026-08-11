@@ -1,6 +1,6 @@
 # chlela-bunker Upgrade Checklist
 
-This checklist is prepared for the physical Ubuntu server. Do not execute it remotely without confirming the Kingston mount, a current backup, and physical recovery access. It never writes to or deletes media files.
+This checklist is prepared for the physical Ubuntu server. The current development branch has not been deployed to or tested against `chlela-bunker`. Do not execute it remotely without confirming the Kingston mount, a current backup, and physical recovery access. It never writes to or deletes media files.
 
 ## Before pulling
 
@@ -43,7 +43,7 @@ git pull --ff-only
 git rev-parse HEAD
 ```
 
-Stop if there are unexpected local changes or if the SHA is not the release you intended.
+The currently deployed commit may be older than the prepared branch. Stop if there are unexpected local changes or if the SHA is not the exact private release commit you intended.
 
 5. Review `.env`. Keep existing secrets out of Git and retain at minimum:
 
@@ -68,7 +68,7 @@ The Docker image remains Node-only plus server FFmpeg/Chromaprint packages. `mob
 
 ## Verify data and services
 
-7. Confirm the additive database startup/migration completed without errors. Do not delete or recreate `/srv/myflix/data`.
+7. Confirm the additive database startup/migration completed without errors. The migration preserves accounts, sessions, catalog IDs, progress, favorites, and poster overrides. Do not delete, reset, or recreate `/srv/myflix/data`.
 
 8. Check health and admin:
 
@@ -129,7 +129,7 @@ If `lm-sensors` is already installed and configured, monitor `sensors`; do not i
 
 17. After local playback is stable, follow [`TAILSCALE.md`](TAILSCALE.md): install Tailscale on the host, use private Serve HTTPS, never Funnel, and test from cellular.
 
-18. Set the exact Serve URL in the native client's connection screen. Do not rebuild the app to change servers.
+18. Set the exact Serve URL in the Expo Go client's connection screen. The native client has not yet been connected to the bunker; do not hardcode or rebuild anything to change servers.
 
 ## Rollback
 

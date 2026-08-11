@@ -37,3 +37,22 @@ test('unavailable compatibility support ends in a final HLS failure state', () =
   assert.equal(model.state, 'hls-failed');
   assert.equal(model.fallbackAttempted, true);
 });
+
+test('manual Original choice starts a fresh Direct attempt without creating a loop', () => {
+  let model = playbackReducer(initialPlaybackModel, { type: 'LOAD_DIRECT' });
+  model = playbackReducer(model, { type: 'DIRECT_FATAL' });
+  model = playbackReducer(model, { type: 'PREPARE_HLS' });
+  model = playbackReducer(model, { type: 'HLS_FATAL' });
+  model = playbackReducer(model, { type: 'LOAD_DIRECT' });
+  assert.deepEqual(model, { state: 'direct-loading', fallbackAttempted: false });
+  assert.equal(canAutomaticallyFallback(model), false);
+});
+
+test('a user can manually retry HLS after a final HLS error', () => {
+  let model = playbackReducer(initialPlaybackModel, { type: 'LOAD_DIRECT' });
+  model = playbackReducer(model, { type: 'DIRECT_FATAL' });
+  model = playbackReducer(model, { type: 'HLS_FATAL' });
+  model = playbackReducer(model, { type: 'PREPARE_HLS' });
+  assert.equal(model.state, 'hls-preparing');
+  assert.equal(model.fallbackAttempted, true);
+});

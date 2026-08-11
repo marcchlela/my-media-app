@@ -51,12 +51,12 @@ export default function AccountScreen() {
 
   if (!app.user) {
     return (
-      <Screen>
+      <Screen demo={app.isDemo}>
         <Brand />
         <View style={styles.memberCard}>
           <Text style={styles.eyebrow}>MYFLIX MEMBERSHIP</Text>
           <Title>{mode === 'login' ? 'Welcome back' : 'Join the lounge'}</Title>
-          <Text style={uiStyles.muted}>{mode === 'login' ? 'Sign in to sync progress and favorites.' : 'Create an account on your existing MyFlix server.'}</Text>
+          <Text style={uiStyles.muted}>{app.isDemo ? 'Use any non-empty demo credentials. Nothing is sent or saved.' : mode === 'login' ? 'Sign in to sync progress and favorites.' : 'Create an account on your existing MyFlix server.'}</Text>
           {mode === 'signup' && <View style={styles.row}><View style={styles.half}><Field label="First name" value={firstName} onChangeText={setFirstName} /></View><View style={styles.half}><Field label="Last name" value={lastName} onChangeText={setLastName} /></View></View>}
           <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
           <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
@@ -71,7 +71,7 @@ export default function AccountScreen() {
   }
 
   return (
-    <Screen>
+    <Screen demo={app.isDemo}>
       <Brand />
       <View style={styles.memberCard}>
         <Text style={styles.eyebrow}>ELECTRIC LOUNGE MEMBER</Text>
@@ -85,6 +85,7 @@ export default function AccountScreen() {
       </View>
       <View style={styles.panel}>
         <Title>Security</Title>
+        {app.isDemo && <Text style={uiStyles.muted}>Password changes are simulated in this temporary demo session.</Text>}
         {passwordOpen ? <><Field label="Current password" value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry /><Field label="New password" value={newPassword} onChangeText={setNewPassword} secureTextEntry /><Field label="Confirm new password" value={newPasswordConfirm} onChangeText={setNewPasswordConfirm} secureTextEntry /><Button label="Change password" icon="lock-closed-outline" onPress={savePassword} /></> : <Button label="Change password" icon="lock-closed-outline" onPress={() => setPasswordOpen(true)} variant="secondary" />}
       </View>
       {!!message && <Text style={styles.success}>{message}</Text>}

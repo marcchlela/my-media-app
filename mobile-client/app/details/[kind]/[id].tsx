@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { imageUrl, Rating } from '../../../src/components/media';
-import { Button, Poster, Screen, Title, uiStyles } from '../../../src/components/ui';
+import { Button, Poster, ProgressBar, Screen, Title, uiStyles } from '../../../src/components/ui';
 import { useMyFlix } from '../../../src/context/MyFlixContext';
 import type { MediaItem, ShowGroup } from '../../../src/api/types';
 import { groupShows } from '../../../src/lib/library';
@@ -21,7 +21,7 @@ export default function DetailsScreen() {
   const [season, setSeason] = useState(show?.episodes[0]?.episode?.season || 1);
   const [error, setError] = useState('');
   const target = movie || show;
-  if (!target) return <Screen><Button label="Back" icon="arrow-back" onPress={() => router.back()} variant="secondary" /><Text style={uiStyles.muted}>This title is no longer in the library.</Text></Screen>;
+  if (!target) return <Screen demo={app.isDemo}><Button label="Back" icon="arrow-back" onPress={() => router.back()} variant="secondary" /><Text style={uiStyles.muted}>This title is no longer in the library.</Text></Screen>;
 
   const title = movie ? movie.title : (show as ShowGroup).name;
   const overview = target.overview || 'No description is available yet.';
@@ -44,8 +44,8 @@ export default function DetailsScreen() {
   }
 
   return (
-    <Screen style={styles.screen}>
-      <Pressable style={styles.back} onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.text} /></Pressable>
+    <Screen style={styles.screen} demo={app.isDemo}>
+      <Pressable style={[styles.back, app.isDemo && styles.backDemo]} onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.text} /></Pressable>
       <ImageBackground source={backdropPath ? { uri: backdropPath, headers: app.api.mediaHeaders() } : undefined} style={styles.backdrop} imageStyle={styles.backdropImage}>
         <View style={styles.backdropShade} />
         <Poster source={posterPath} title={title} headers={app.api.mediaHeaders()} width={152} />
@@ -57,7 +57,7 @@ export default function DetailsScreen() {
       {show && <>
         <Title>Seasons</Title>
         <View style={styles.seasons}>{seasons.map((number) => <Pressable key={number} style={[styles.season, number === season && styles.seasonActive]} onPress={() => setSeason(number)}><Text style={[styles.seasonText, number === season && styles.seasonTextActive]}>Season {number}</Text></Pressable>)}</View>
-        <View style={styles.episodes}>{episodes.map((episode) => <Pressable key={episode.id} style={styles.episode} onPress={() => play(episode)} disabled={!episode.available}><View style={styles.episodeCopy}><Text style={styles.episodeCode}>{episodeCode(episode)}</Text><Text style={styles.episodeTitle}>{episode.title}</Text>{episode.watchProgress && <View style={styles.progressTextRow}><Text style={styles.episodeMeta}>{Math.round(episode.watchProgress.percent)}% watched</Text></View>}<Text numberOfLines={3} style={styles.episodeOverview}>{episode.overview || 'Episode details are not available.'}</Text></View><Ionicons name="play-circle" size={39} color={episode.available ? colors.gold : colors.muted} /></Pressable>)}</View>
+        <View style={styles.episodes}>{episodes.map((episode) => <Pressable key={episode.id} style={styles.episode} onPress={() => play(episode)} disabled={!episode.available}><View style={styles.episodeCopy}><Text style={styles.episodeCode}>{episodeCode(episode)}</Text><Text style={styles.episodeTitle}>{episode.title}</Text>{episode.watchProgress && <View style={styles.progressBlock}><View style={styles.progressTextRow}><Text style={styles.episodeMeta}>{Math.round(episode.watchProgress.percent)}% watched</Text></View><ProgressBar percent={episode.watchProgress.percent} /></View>}<Text numberOfLines={3} style={styles.episodeOverview}>{episode.overview || 'Episode details are not available.'}</Text></View><Ionicons name="play-circle" size={39} color={episode.available ? colors.gold : colors.muted} /></Pressable>)}</View>
       </>}
     </Screen>
   );
@@ -66,6 +66,7 @@ export default function DetailsScreen() {
 const styles = StyleSheet.create({
   screen: { paddingTop: 8 },
   back: { position: 'absolute', zIndex: 4, top: 20, left: 20, width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: '#100b0bcc' },
+  backDemo: { top: 72 },
   backdrop: { height: 330, marginHorizontal: -18, marginTop: -18, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 22 },
   backdropImage: { opacity: 0.55 },
   backdropShade: { ...StyleSheet.absoluteFillObject, backgroundColor: '#100b0b55' },
@@ -90,5 +91,6 @@ const styles = StyleSheet.create({
   episodeTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
   episodeMeta: { color: colors.burgundyBright, fontSize: 12, fontWeight: '800' },
   progressTextRow: { flexDirection: 'row' },
+  progressBlock: { gap: 6 },
   episodeOverview: { color: colors.muted, lineHeight: 18, fontSize: 13 },
 });
