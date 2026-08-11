@@ -139,6 +139,21 @@ test('mobile and desktop serve the same responsive Electric Lounge client', asyn
   assert.match(mobile, /app\.js/);
 });
 
+test('versioned and root Apple touch icon routes serve the same artwork', async () => {
+  const [versionedResponse, rootResponse] = await Promise.all([
+    fetch(`${baseUrl}/web/icons/apple-touch-icon-v2.png`),
+    fetch(`${baseUrl}/apple-touch-icon.png`),
+  ]);
+  assert.equal(versionedResponse.status, 200);
+  assert.equal(rootResponse.status, 200);
+  assert.equal(versionedResponse.headers.get('content-type'), 'image/png');
+  assert.equal(rootResponse.headers.get('content-type'), 'image/png');
+  const versionedIcon = Buffer.from(await versionedResponse.arrayBuffer());
+  const rootIcon = Buffer.from(await rootResponse.arrayBuffer());
+  assert.deepEqual(rootIcon, versionedIcon);
+  assert.deepEqual(versionedIcon, fs.readFileSync(path.join(__dirname, '..', 'web', 'icons', 'apple-touch-icon-v2.png')));
+});
+
 test('ID streaming supports Range and rejects legacy path routes', async () => {
   const [item] = await fetch(`${baseUrl}/api/library`).then((response) => response.json());
   const response = await fetch(`${baseUrl}${item.streamUrl}`, { headers: { Range: 'bytes=5-14' } });

@@ -155,7 +155,7 @@ test('web Add to Home Screen manifest and icons are complete', () => {
   const expectedIcons = [
     ['web/icons/icon-512.png', 512],
     ['web/icons/icon-192.png', 192],
-    ['web/icons/apple-touch-icon.png', 180],
+    ['web/icons/apple-touch-icon-v2.png', 180],
     ['web/icons/favicon-32.png', 32],
   ];
   for (const [iconPath, expectedSize] of expectedIcons) {
@@ -170,7 +170,7 @@ test('web Add to Home Screen manifest and icons are complete', () => {
   const html = fs.readFileSync(path.join(root, 'web/index.html'), 'utf8');
   assert.match(html, /name="viewport"/);
   assert.match(html, /name="apple-mobile-web-app-capable" content="yes"/);
-  assert.match(html, /rel="apple-touch-icon"[^>]+apple-touch-icon\.png/);
+  assert.match(html, /rel="apple-touch-icon"[^>]+href="\/web\/icons\/apple-touch-icon-v2\.png"/);
   assert.match(html, /rel="manifest"[^>]+manifest\.webmanifest/);
 });
 

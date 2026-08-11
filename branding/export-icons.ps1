@@ -74,5 +74,5 @@ $webMaster = if ($env:MYFLIX_WEB_ICON_VARIANT -eq 'electric') {
 }
 Resize-Png $webMaster (Join-Path $webIcons 'icon-512.png') 512
 Resize-Png $webMaster (Join-Path $webIcons 'icon-192.png') 192
-Resize-Png $webMaster (Join-Path $webIcons 'apple-touch-icon.png') 180
+Resize-Png $webMaster (Join-Path $webIcons 'apple-touch-icon-v2.png') 180
 Resize-Png $webMaster (Join-Path $webIcons 'favicon-32.png') 32

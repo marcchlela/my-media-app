@@ -391,6 +391,7 @@ function createApp(options = {}) {
     next();
   });
   app.use('/web', express.static(WEB_DIR, { fallthrough: true, maxAge: NODE_ENV === 'production' ? '1h' : 0 }));
+  app.get('/apple-touch-icon.png', (_req, res) => res.sendFile(path.join(WEB_DIR, 'icons', 'apple-touch-icon-v2.png')));
   app.get('/vendor/hls.min.js', (_req, res) => res.sendFile(path.join(__dirname, 'node_modules', 'hls.js', 'dist', 'hls.min.js')));
   app.use('/electric-assets', express.static(ELECTRIC_ASSET_DIR, {
     fallthrough: false,
