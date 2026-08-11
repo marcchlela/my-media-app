@@ -4,7 +4,7 @@ const path = require('path');
 const { ensureDatabase } = require('./account-store');
 const { normalizeComparable } = require('./media-utils');
 
-const CATALOG_SCHEMA_VERSION = 4;
+const CATALOG_SCHEMA_VERSION = 7;
 
 function now() {
   return Date.now();
@@ -62,6 +62,7 @@ function migrateCatalogSchema(db = ensureDatabase()) {
       rating REAL,
       runtime_minutes INTEGER,
       metadata_locked INTEGER NOT NULL DEFAULT 0,
+      hidden INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -98,6 +99,16 @@ function migrateCatalogSchema(db = ensureDatabase()) {
       rating REAL,
       runtime_minutes INTEGER,
       metadata_locked INTEGER NOT NULL DEFAULT 0,
+      hidden INTEGER NOT NULL DEFAULT 0,
+      intro_start REAL,
+      intro_end REAL,
+      credits_start REAL,
+      marker_source TEXT,
+      marker_scan_version INTEGER NOT NULL DEFAULT 0,
+      intro_confidence REAL,
+      credits_confidence REAL,
+      marker_analyzed_at INTEGER,
+      marker_analysis_version INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       last_seen_at INTEGER,
@@ -116,6 +127,7 @@ function migrateCatalogSchema(db = ensureDatabase()) {
       modified_at REAL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
       UNIQUE(media_id, file_path),
       FOREIGN KEY (media_id) REFERENCES media_items(id) ON DELETE CASCADE
     );
@@ -152,6 +164,21 @@ function migrateCatalogSchema(db = ensureDatabase()) {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS media_suggestions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      media_type TEXT NOT NULL CHECK(media_type IN ('movie', 'show')),
+      title TEXT NOT NULL,
+      tmdb_id INTEGER,
+      poster_path TEXT,
+      release_date TEXT,
+      note TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'declined')),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_media_items_source ON media_items(source_id);
     CREATE INDEX IF NOT EXISTS idx_media_items_show_episode ON media_items(show_id, season_number, episode_number);
     CREATE INDEX IF NOT EXISTS idx_media_items_available ON media_items(available);
@@ -160,7 +187,19 @@ function migrateCatalogSchema(db = ensureDatabase()) {
   `);
 
   ensureColumn(db, 'shows', 'source_title', 'TEXT');
+  ensureColumn(db, 'shows', 'hidden', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'media_items', 'source_title', 'TEXT');
+  ensureColumn(db, 'media_items', 'hidden', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'media_items', 'intro_start', 'REAL');
+  ensureColumn(db, 'media_items', 'intro_end', 'REAL');
+  ensureColumn(db, 'media_items', 'credits_start', 'REAL');
+  ensureColumn(db, 'media_items', 'marker_source', 'TEXT');
+  ensureColumn(db, 'media_items', 'marker_scan_version', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'media_items', 'intro_confidence', 'REAL');
+  ensureColumn(db, 'media_items', 'credits_confidence', 'REAL');
+  ensureColumn(db, 'media_items', 'marker_analyzed_at', 'INTEGER');
+  ensureColumn(db, 'media_items', 'marker_analysis_version', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'subtitles', 'enabled', 'INTEGER NOT NULL DEFAULT 1');
   db.exec(`
     UPDATE shows SET source_title = title WHERE source_title IS NULL OR source_title = '';
     UPDATE media_items SET source_title = title WHERE source_title IS NULL OR source_title = '';
@@ -232,10 +271,10 @@ function updateSourceScanState(sourceId, values = {}) {
 
 function getCatalogCounts() {
   const db = getDb();
-  const movies = db.prepare("SELECT COUNT(*) AS count FROM media_items WHERE media_type = 'movie'").get().count;
-  const episodes = db.prepare("SELECT COUNT(*) AS count FROM media_items WHERE media_type = 'episode'").get().count;
-  const shows = db.prepare('SELECT COUNT(*) AS count FROM shows').get().count;
-  const available = db.prepare('SELECT COUNT(*) AS count FROM media_items WHERE available = 1').get().count;
+  const movies = db.prepare("SELECT COUNT(*) AS count FROM media_items WHERE media_type = 'movie' AND hidden = 0").get().count;
+  const episodes = db.prepare("SELECT COUNT(*) AS count FROM media_items WHERE media_type = 'episode' AND hidden = 0").get().count;
+  const shows = db.prepare('SELECT COUNT(*) AS count FROM shows WHERE hidden = 0').get().count;
+  const available = db.prepare('SELECT COUNT(*) AS count FROM media_items WHERE available = 1 AND hidden = 0').get().count;
   return { movies: Number(movies), shows: Number(shows), episodes: Number(episodes), available: Number(available) };
 }
 
@@ -340,6 +379,13 @@ function saveScannedMedia(record, existing = null) {
     backdropPath: record.backdropPath ?? existing?.backdrop_path,
     releaseDate: record.releaseDate ?? existing?.release_date,
     runtimeMinutes: record.runtimeMinutes ?? existing?.runtime_minutes,
+    introStart: record.introStart ?? existing?.intro_start,
+    introEnd: record.introEnd ?? existing?.intro_end,
+    creditsStart: record.creditsStart ?? existing?.credits_start,
+    introConfidence: record.introConfidence ?? existing?.intro_confidence,
+    creditsConfidence: record.creditsConfidence ?? existing?.credits_confidence,
+    markerSource: record.markerSource ?? existing?.marker_source,
+    markerScanVersion: record.markerScanVersion ?? existing?.marker_scan_version ?? 0,
     metadataLocked: record.metadataLocked ?? existing?.metadata_locked,
     genres: record.genres ?? parseJson(existing?.genres_json, []),
     available: 1,
@@ -372,6 +418,10 @@ function saveScannedMedia(record, existing = null) {
         release_date = COALESCE(?, release_date),
         genres_json = CASE WHEN ? != '[]' THEN ? ELSE genres_json END,
         rating = COALESCE(?, rating), runtime_minutes = COALESCE(?, runtime_minutes),
+        intro_start = COALESCE(intro_start, ?), intro_end = COALESCE(intro_end, ?),
+        credits_start = COALESCE(credits_start, ?), intro_confidence = COALESCE(intro_confidence, ?),
+        credits_confidence = COALESCE(credits_confidence, ?), marker_source = COALESCE(marker_source, ?),
+        marker_scan_version = MAX(marker_scan_version, ?),
         updated_at = ?, last_seen_at = ?
       WHERE id = ?
     `).run(
@@ -383,7 +433,10 @@ function saveScannedMedia(record, existing = null) {
       values.width || null, values.height || null, values.tmdbId || null, values.posterPath || null,
       values.backdropPath || null, values.overview || null, values.releaseDate || null,
       JSON.stringify(values.genres || []), JSON.stringify(values.genres || []), values.rating ?? null,
-      values.runtimeMinutes ?? null, timestamp, timestamp, id
+      values.runtimeMinutes ?? null, values.introStart ?? null, values.introEnd ?? null,
+      values.creditsStart ?? null, values.introConfidence ?? null, values.creditsConfidence ?? null,
+      values.markerSource || null, values.markerScanVersion || 0,
+      timestamp, timestamp, id
     );
   } else {
     db.prepare(`
@@ -392,8 +445,9 @@ function saveScannedMedia(record, existing = null) {
         source_title, normalized_title, season_number, episode_number, episode_end_number, available,
         file_size, modified_at, duration_seconds, container, video_codec, audio_codec, width,
         height, tmdb_id, poster_path, backdrop_path, overview, release_date, genres_json,
-        rating, runtime_minutes, metadata_locked, created_at, updated_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        rating, runtime_minutes, metadata_locked, intro_start, intro_end, credits_start,
+        intro_confidence, credits_confidence, marker_source, marker_scan_version, created_at, updated_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, values.sourceId, values.mediaType, values.showId || null, path.resolve(values.filePath),
       values.relativePath || null, values.filename, values.title, values.sourceTitle, values.normalizedTitle,
@@ -403,7 +457,10 @@ function saveScannedMedia(record, existing = null) {
       values.width || null, values.height || null, values.tmdbId || null, values.posterPath || null,
       values.backdropPath || null, values.overview || null, values.releaseDate || null,
       JSON.stringify(values.genres || []), values.rating ?? null, values.runtimeMinutes ?? null,
-      values.metadataLocked ? 1 : 0, values.createdAt, values.updatedAt, values.lastSeenAt
+      values.metadataLocked ? 1 : 0, values.introStart ?? null, values.introEnd ?? null,
+      values.creditsStart ?? null, values.introConfidence ?? null, values.creditsConfidence ?? null,
+      values.markerSource || null, values.markerScanVersion || 0,
+      values.createdAt, values.updatedAt, values.lastSeenAt
     );
   }
   return db.prepare('SELECT * FROM media_items WHERE id = ?').get(id);
@@ -540,9 +597,10 @@ function getPublicLibrary(userId = null) {
       ,shows.metadata_locked AS show_metadata_locked
     FROM media_items
     LEFT JOIN shows ON shows.id = media_items.show_id
+    WHERE media_items.hidden = 0 AND (media_items.media_type = 'movie' OR COALESCE(shows.hidden, 0) = 0)
     ORDER BY media_items.media_type, media_items.title, media_items.season_number, media_items.episode_number
   `).all();
-  const subtitles = db.prepare('SELECT id, media_id, display_name, language FROM subtitles ORDER BY display_name').all();
+  const subtitles = db.prepare('SELECT id, media_id, display_name, language FROM subtitles WHERE enabled = 1 ORDER BY display_name').all();
   const subtitlesByMedia = new Map();
   for (const subtitle of subtitles) {
     if (!subtitlesByMedia.has(subtitle.media_id)) subtitlesByMedia.set(subtitle.media_id, []);
@@ -615,6 +673,14 @@ function getPublicLibrary(userId = null) {
         percent: watch.percent,
         updatedAt: watch.updated_at,
       } : null,
+      playbackMarkers: isShow ? {
+        introStart: row.intro_start,
+        introEnd: row.intro_end,
+        creditsStart: row.credits_start,
+        introConfidence: row.intro_confidence,
+        creditsConfidence: row.credits_confidence,
+        source: row.marker_source || null,
+      } : null,
     };
   });
 }
@@ -647,6 +713,28 @@ function saveMediaProgress(userId, mediaId, input) {
       completed = excluded.completed, updated_at = excluded.updated_at
   `).run(userId, mediaId, safePosition, duration, percent, percent >= 100 ? 1 : 0, updatedAt);
   return { position: safePosition, duration, percent, updatedAt };
+}
+
+function getViewingStats(userId) {
+  if (!userId) return null;
+  const row = getDb().prepare(`
+    SELECT
+      COALESCE(SUM(MIN(progress.position, progress.duration)), 0) AS watched_seconds,
+      COUNT(DISTINCT CASE WHEN items.media_type = 'movie' AND progress.completed = 1 THEN items.id END) AS movies_watched,
+      COUNT(DISTINCT CASE WHEN items.media_type = 'episode' AND progress.completed = 1 THEN items.id END) AS episodes_watched,
+      COUNT(DISTINCT CASE WHEN items.media_type = 'episode' THEN items.show_id END) AS shows_started
+    FROM media_watch_progress progress
+    JOIN media_items items ON items.id = progress.media_id
+    WHERE progress.user_id = ?
+  `).get(userId);
+  const watchedSeconds = Number(row?.watched_seconds) || 0;
+  return {
+    watchedSeconds,
+    watchedHours: Math.round((watchedSeconds / 3600) * 10) / 10,
+    moviesWatched: Number(row?.movies_watched) || 0,
+    episodesWatched: Number(row?.episodes_watched) || 0,
+    showsStarted: Number(row?.shows_started) || 0,
+  };
 }
 
 function resolveFavoriteTarget(input) {
@@ -787,6 +875,259 @@ function updateAdminMetadata(mediaId, input) {
   return applyAdminMetadata('movie', mediaId, input, { locked: true });
 }
 
+function getAdminLibraryTree() {
+  const db = getDb();
+  const subtitlesByMedia = new Map();
+  for (const row of db.prepare('SELECT id, media_id, display_name, language, format, enabled FROM subtitles ORDER BY display_name').all()) {
+    if (!subtitlesByMedia.has(row.media_id)) subtitlesByMedia.set(row.media_id, []);
+    subtitlesByMedia.get(row.media_id).push({
+      id: row.id,
+      name: row.display_name,
+      language: row.language,
+      format: row.format,
+      enabled: !!row.enabled,
+    });
+  }
+  const movies = db.prepare(`
+    SELECT id, title, hidden, available, tmdb_id, poster_path, file_size, duration_seconds,
+           CASE WHEN tmdb_id IS NULL THEN 1 ELSE 0 END AS unmatched
+    FROM media_items WHERE media_type = 'movie' ORDER BY title
+  `).all().map((row) => ({ ...row, hidden: !!row.hidden, available: !!row.available, unmatched: !!row.unmatched, subtitles: subtitlesByMedia.get(row.id) || [], subtitleCount: (subtitlesByMedia.get(row.id) || []).length }));
+  const shows = db.prepare(`
+    SELECT id, title, hidden, tmdb_id, poster_path, CASE WHEN tmdb_id IS NULL THEN 1 ELSE 0 END AS unmatched
+    FROM shows ORDER BY title
+  `).all().map((show) => ({
+    ...show,
+    hidden: !!show.hidden,
+    unmatched: !!show.unmatched,
+    seasons: [],
+  }));
+  const showsById = new Map(shows.map((show) => [show.id, show]));
+  const seasonsByKey = new Map();
+  for (const row of db.prepare(`
+    SELECT id, show_id, title, season_number, episode_number, episode_end_number, hidden,
+           intro_start, intro_end, credits_start, intro_confidence, credits_confidence,
+           marker_source, marker_analyzed_at, marker_analysis_version, available, file_size
+    FROM media_items WHERE media_type = 'episode'
+    ORDER BY show_id, season_number, episode_number
+  `).all()) {
+    const show = showsById.get(row.show_id);
+    if (!show) continue;
+    const key = `${row.show_id}:${row.season_number || 0}`;
+    let season = seasonsByKey.get(key);
+    if (!season) {
+      season = { number: row.season_number || 0, episodes: [] };
+      seasonsByKey.set(key, season);
+      show.seasons.push(season);
+    }
+    season.episodes.push({
+      id: row.id,
+      title: row.title,
+      episode: row.episode_number,
+      episodeEnd: row.episode_end_number,
+      hidden: !!row.hidden,
+      available: !!row.available,
+      fileSize: row.file_size,
+      subtitles: subtitlesByMedia.get(row.id) || [],
+      subtitleCount: (subtitlesByMedia.get(row.id) || []).length,
+      playbackMarkers: {
+        introStart: row.intro_start,
+        introEnd: row.intro_end,
+        creditsStart: row.credits_start,
+        introConfidence: row.intro_confidence,
+        creditsConfidence: row.credits_confidence,
+        source: row.marker_source,
+        analyzedAt: row.marker_analyzed_at,
+        analysisVersion: row.marker_analysis_version,
+      },
+    });
+  }
+  return { movies, shows };
+}
+
+function setCatalogVisibility(input, hidden) {
+  const db = getDb();
+  const scope = String(input?.scope || '');
+  const value = hidden ? 1 : 0;
+  const timestamp = now();
+  if (scope === 'all') {
+    db.prepare('UPDATE shows SET hidden = ?, updated_at = ?').run(value, timestamp);
+    db.prepare('UPDATE media_items SET hidden = ?, updated_at = ?').run(value, timestamp);
+    return true;
+  }
+  if (scope === 'movie') {
+    return !!db.prepare("UPDATE media_items SET hidden = ?, updated_at = ? WHERE id = ? AND media_type = 'movie'")
+      .run(value, timestamp, String(input?.id || '')).changes;
+  }
+  if (scope === 'episode') {
+    return !!db.prepare("UPDATE media_items SET hidden = ?, updated_at = ? WHERE id = ? AND media_type = 'episode'")
+      .run(value, timestamp, String(input?.id || '')).changes;
+  }
+  if (scope === 'season') {
+    const season = Number.parseInt(String(input?.season), 10);
+    if (!Number.isInteger(season)) return false;
+    return !!db.prepare(`
+      UPDATE media_items SET hidden = ?, updated_at = ?
+      WHERE show_id = ? AND media_type = 'episode' AND season_number = ?
+    `).run(value, timestamp, String(input?.showId || ''), season).changes;
+  }
+  if (scope === 'show') {
+    const showId = String(input?.id || '');
+    const result = db.prepare('UPDATE shows SET hidden = ?, updated_at = ? WHERE id = ?')
+      .run(value, timestamp, showId);
+    if (!result.changes) return false;
+    db.prepare("UPDATE media_items SET hidden = ?, updated_at = ? WHERE show_id = ? AND media_type = 'episode'")
+      .run(value, timestamp, showId);
+    return true;
+  }
+  return false;
+}
+
+function deleteCatalogEntry(input = {}) {
+  const db = getDb();
+  const scope = String(input.scope || '');
+  const id = String(input.id || '');
+  if (!['movie', 'episode', 'season', 'show'].includes(scope)) return false;
+  if (scope === 'season') {
+    const showId = String(input.showId || '');
+    const season = Number.parseInt(String(input.season), 10);
+    if (!showId || !Number.isInteger(season)) return false;
+    return !!db.prepare("DELETE FROM media_items WHERE show_id = ? AND media_type = 'episode' AND season_number = ?")
+      .run(showId, season).changes;
+  }
+  if (!id) return false;
+  if (scope === 'show') {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare("DELETE FROM media_favorites WHERE target_type = 'show' AND target_id = ?").run(id);
+      db.prepare("DELETE FROM media_poster_overrides WHERE target_type = 'show' AND target_id = ?").run(id);
+      const episodes = db.prepare("SELECT id FROM media_items WHERE show_id = ? AND media_type = 'episode'").all(id);
+      const removeItem = db.prepare('DELETE FROM media_items WHERE id = ?');
+      episodes.forEach((episode) => removeItem.run(episode.id));
+      const changes = db.prepare('DELETE FROM shows WHERE id = ?').run(id).changes;
+      db.exec('COMMIT');
+      return !!changes;
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+  const mediaType = scope === 'movie' ? 'movie' : 'episode';
+  if (scope === 'movie') {
+    db.prepare("DELETE FROM media_favorites WHERE target_type = 'movie' AND target_id = ?").run(id);
+    db.prepare("DELETE FROM media_poster_overrides WHERE target_type = 'movie' AND target_id = ?").run(id);
+  }
+  return !!db.prepare('DELETE FROM media_items WHERE id = ? AND media_type = ?').run(id, mediaType).changes;
+}
+
+function updatePlaybackMarkers(mediaId, input) {
+  const parse = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : NaN;
+  };
+  const introStart = parse(input?.introStart);
+  const introEnd = parse(input?.introEnd);
+  const creditsStart = parse(input?.creditsStart);
+  if ([introStart, introEnd, creditsStart].some(Number.isNaN)) return false;
+  if ((introStart === null) !== (introEnd === null)) return false;
+  if (introStart !== null && introEnd <= introStart) return false;
+  const db = getDb();
+  const result = db.prepare(`
+    UPDATE media_items SET intro_start = ?, intro_end = ?, credits_start = ?,
+      intro_confidence = CASE WHEN ? IS NULL THEN NULL ELSE 1 END,
+      credits_confidence = CASE WHEN ? IS NULL THEN NULL ELSE 1 END,
+      marker_source = 'manual', marker_scan_version = 1, marker_analyzed_at = ?, updated_at = ?
+    WHERE id = ? AND media_type = 'episode'
+  `).run(introStart, introEnd, creditsStart, introEnd, creditsStart, now(), now(), mediaId);
+  return !!result.changes;
+}
+
+function updateAutomaticPlaybackMarkers(mediaId, input = {}) {
+  const db = getDb();
+  const item = db.prepare("SELECT marker_source FROM media_items WHERE id = ? AND media_type = 'episode'").get(mediaId);
+  if (!item) return false;
+  const manual = item.marker_source === 'manual';
+  const result = db.prepare(`
+    UPDATE media_items SET
+      intro_start = CASE WHEN ? OR ? IS NULL THEN intro_start ELSE ? END,
+      intro_end = CASE WHEN ? OR ? IS NULL THEN intro_end ELSE ? END,
+      intro_confidence = CASE WHEN ? OR ? IS NULL THEN intro_confidence ELSE ? END,
+      credits_start = CASE WHEN ? OR ? IS NULL THEN credits_start ELSE ? END,
+      credits_confidence = CASE WHEN ? OR ? IS NULL THEN credits_confidence ELSE ? END,
+      marker_source = CASE WHEN ? OR ? IS NULL THEN marker_source ELSE ? END,
+      marker_analyzed_at = CASE WHEN ? THEN ? ELSE marker_analyzed_at END,
+      marker_analysis_version = MAX(marker_analysis_version, ?),
+      updated_at = ?
+    WHERE id = ? AND media_type = 'episode'
+  `).run(
+    manual ? 1 : 0, input.introStart ?? null, input.introStart ?? null,
+    manual ? 1 : 0, input.introEnd ?? null, input.introEnd ?? null,
+    manual ? 1 : 0, input.introConfidence ?? null, input.introConfidence ?? null,
+    manual ? 1 : 0, input.creditsStart ?? null, input.creditsStart ?? null,
+    manual ? 1 : 0, input.creditsConfidence ?? null, input.creditsConfidence ?? null,
+    manual ? 1 : 0, input.source || null, input.source || null,
+    input.analyzed ? 1 : 0, now(), Number(input.analysisVersion) || 0, now(), mediaId
+  );
+  return !!result.changes;
+}
+
+function setSubtitleEnabled(subtitleId, enabled) {
+  return !!getDb().prepare('UPDATE subtitles SET enabled = ?, updated_at = ? WHERE id = ?')
+    .run(enabled ? 1 : 0, now(), String(subtitleId || '')).changes;
+}
+
+function createMediaSuggestion(userId, input = {}) {
+  const mediaType = input.mediaType === 'show' ? 'show' : input.mediaType === 'movie' ? 'movie' : '';
+  const title = String(input.title || '').trim().slice(0, 180);
+  const tmdbId = Number.parseInt(String(input.tmdbId || ''), 10);
+  const note = String(input.note || '').trim().slice(0, 500);
+  if (!userId || !mediaType || !title || !Number.isInteger(tmdbId) || tmdbId <= 0) return null;
+  const db = getDb();
+  const existing = db.prepare(`
+    SELECT id FROM media_suggestions
+    WHERE user_id = ? AND media_type = ? AND tmdb_id = ? AND status = 'pending'
+  `).get(userId, mediaType, tmdbId);
+  if (existing) return db.prepare('SELECT * FROM media_suggestions WHERE id = ?').get(existing.id);
+  const id = createStableId('suggestion');
+  const timestamp = now();
+  db.prepare(`
+    INSERT INTO media_suggestions (
+      id, user_id, media_type, title, tmdb_id, poster_path, release_date, note, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+  `).run(id, userId, mediaType, title, tmdbId, input.posterPath || null, input.releaseDate || null, note || null, timestamp, timestamp);
+  return db.prepare('SELECT * FROM media_suggestions WHERE id = ?').get(id);
+}
+
+function listMediaSuggestions(userId = null) {
+  const db = getDb();
+  const sql = `
+    SELECT suggestions.*, users.first_name, users.last_name, users.email
+    FROM media_suggestions suggestions
+    JOIN users ON users.id = suggestions.user_id
+    ${userId ? 'WHERE suggestions.user_id = ?' : ''}
+    ORDER BY CASE suggestions.status WHEN 'pending' THEN 0 ELSE 1 END, suggestions.created_at DESC
+  `;
+  return db.prepare(sql).all(...(userId ? [userId] : [])).map((row) => ({
+    id: row.id,
+    mediaType: row.media_type,
+    title: row.title,
+    tmdbId: row.tmdb_id,
+    posterPath: row.poster_path,
+    releaseDate: row.release_date,
+    note: row.note,
+    status: row.status,
+    createdAt: row.created_at,
+    user: { id: row.user_id, name: `${row.first_name} ${row.last_name}`.trim(), email: row.email },
+  }));
+}
+
+function updateMediaSuggestionStatus(id, status) {
+  if (!['pending', 'approved', 'declined'].includes(status)) return false;
+  return !!getDb().prepare('UPDATE media_suggestions SET status = ?, updated_at = ? WHERE id = ?')
+    .run(status, now(), String(id || '')).changes;
+}
+
 function migrateLegacyAccountState() {
   const db = getDb();
   db.exec(`
@@ -808,12 +1149,16 @@ function migrateLegacyAccountState() {
 module.exports = {
   applyAdminMetadata,
   clearAdminMetadata,
+  createMediaSuggestion,
+  deleteCatalogEntry,
   findMediaByPath,
   findRelinkCandidate,
   getCatalogCounts,
+  getAdminLibraryTree,
   getDb,
   getEpisodesForShow,
   getMediaSources,
+  getViewingStats,
   getMetadataTarget,
   getMimeType,
   getPrivateMedia,
@@ -825,14 +1170,20 @@ module.exports = {
   migrateCatalogSchema,
   migrateLegacyAccountState,
   listMissingMetadataTargets,
+  listMediaSuggestions,
   replaceSubtitles,
   saveMediaProgress,
   saveScannedMedia,
   setMediaFavorite,
   setMediaPosterOverride,
+  setCatalogVisibility,
+  setSubtitleEnabled,
   setSetting,
   updateAdminMetadata,
+  updateAutomaticPlaybackMarkers,
   updateEpisodeMetadata,
+  updateMediaSuggestionStatus,
+  updatePlaybackMarkers,
   updateSourceScanState,
   upsertMediaSource,
   upsertShow,

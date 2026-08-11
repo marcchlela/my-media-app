@@ -9,7 +9,10 @@
 <body>
   <header class="topbar">
     <h1 id="homeBtn">MyFlix</h1>
-    <button id="refreshBtn" class="ghost-btn">Refresh</button>
+    <div class="mobile-top-actions">
+      <button id="movieNightBtn" class="ghost-btn" type="button">Movie Night</button>
+      <button id="suggestionBtn" class="ghost-btn accent" type="button">Suggest</button>
+    </div>
   </header>
 
   <main class="page">
@@ -40,6 +43,8 @@
       </div>
       <div id="playerStage" class="player-stage">
         <video id="player" playsinline></video>
+        <button id="skipIntroBtn" class="player-marker-action hidden" type="button">Skip Intro</button>
+        <button id="nextEpisodeBtn" class="player-marker-action next-episode hidden" type="button">Next Episode</button>
         <div id="playerControls" class="player-controls">
           <div class="player-timeline-wrap">
             <input id="timelineRange" class="player-timeline" type="range" min="0" max="1000" value="0" />
@@ -55,6 +60,10 @@
               <span id="durationLabel" class="player-time player-time-end">0:00</span>
             </div>
             <div class="player-right-controls">
+              <div id="qualityGroup" class="player-quality-group">
+                <button id="qualityBtn" class="player-control-btn subtle" type="button" aria-label="Playback quality" aria-expanded="false"><span id="qualityButtonLabel" class="quality-button-label">HD</span></button>
+                <div id="qualityMenu" class="player-quality-menu" role="menu" aria-label="Playback quality"></div>
+              </div>
               <div class="player-volume-group">
                 <button id="muteBtn" class="player-control-btn subtle" type="button" aria-label="Mute"></button>
                 <div class="player-range-shell">
@@ -78,6 +87,7 @@
     <button data-view="account" class="nav-btn">Account</button>
   </nav>
 
+  <script src="/vendor/hls.min.js"></script>
   <script src="/mobile/app.js"></script>
 </body>
 </html>

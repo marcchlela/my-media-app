@@ -24,7 +24,8 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "ffprobe-static": "^3.1.0"
+    "ffprobe-static": "^3.1.0",
+    "hls.js": "^1.6.13"
   },
   "build": {
     "appId": "com.mymediaapp.desktop",

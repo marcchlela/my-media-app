@@ -6,17 +6,21 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg libchromaprint-tools \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts=false \
     && npm cache clean --force
 
 COPY account-store.js env-config.js media-scanner.js media-store.js media-utils.js metadata-manager.js ./
-COPY server.js streaming.js tmdb-service.js ./
+COPY server.js streaming.js tmdb-service.js job-manager.js stream-manager.js system-monitor.js hls-manager.js intro-detector.js ./
 COPY web ./web
-COPY mobile ./mobile
 COPY myflix-electric/assets/generated-3d/*-web.webp ./myflix-electric/assets/generated-3d/
+COPY myflix-electric/assets/generated-3d/cinema-room-v3.png ./myflix-electric/assets/generated-3d/
 
-RUN mkdir -p /data/cache/subtitles \
+RUN mkdir -p /data/cache/subtitles /data/cache/hls /data/backups /data/custom-posters \
     && chown -R node:node /data
 
 USER node

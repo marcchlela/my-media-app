@@ -20,6 +20,7 @@ const {
   getPrivateShow,
   getPublicLibrary,
   saveScannedMedia,
+  updatePlaybackMarkers,
   upsertMediaSource,
   upsertShow,
 } = require('../media-store');
@@ -132,6 +133,16 @@ test('manual show match persists and refreshes associated episodes', async () =>
   assert.equal(getPrivateShow(show.id).title, 'Canonical Show');
   assert.equal(getPrivateShow(show.id).metadata_locked, 1);
   assert.equal(getDb().prepare('SELECT title FROM media_items WHERE id = ?').get(episode.id).title, 'Pilot');
+  assert.equal(updatePlaybackMarkers(episode.id, { introStart: 12, introEnd: 48, creditsStart: 1330 }), true);
+  const publicEpisode = getPublicLibrary().find((item) => item.id === episode.id);
+  assert.deepEqual(publicEpisode.playbackMarkers, {
+    introStart: 12,
+    introEnd: 48,
+    creditsStart: 1330,
+    introConfidence: 1,
+    creditsConfidence: 1,
+    source: 'manual',
+  });
   assert.equal(manager.clearManualMatch('show', show.id), true);
   assert.equal(getPrivateShow(show.id).title, 'Example Show');
   assert.equal(getPrivateShow(show.id).tmdb_id, null);

@@ -485,6 +485,60 @@ function loginUserAccount(input) {
   return { ok: true, user, sessionToken: token };
 }
 
+function updateUserProfile(userId, input) {
+  const firstName = String(input?.firstName || '').trim();
+  const lastName = String(input?.lastName || '').trim();
+  const fieldErrors = {};
+  if (!firstName) fieldErrors.firstName = 'First name is required.';
+  if (!lastName) fieldErrors.lastName = 'Last name is required.';
+  if (firstName.length > 80) fieldErrors.firstName = 'First name is too long.';
+  if (lastName.length > 80) fieldErrors.lastName = 'Last name is too long.';
+  if (Object.keys(fieldErrors).length) return { ok: false, fieldErrors };
+
+  const db = ensureDatabase();
+  const result = db.prepare(`
+    UPDATE users SET first_name = ?, last_name = ?, updated_at = ? WHERE id = ?
+  `).run(firstName, lastName, Date.now(), userId);
+  if (!result.changes) return { ok: false, error: 'Account was not found.' };
+  const adminSelect = hasAdminColumn(db) ? 'is_admin' : '0 AS is_admin';
+  const row = db.prepare(`
+    SELECT id, first_name, last_name, email, ${adminSelect}, created_at FROM users WHERE id = ?
+  `).get(userId);
+  return { ok: true, user: publicUser(row) };
+}
+
+function changeUserPassword(userId, input, currentSessionToken = '') {
+  const currentPassword = String(input?.currentPassword || '');
+  const newPassword = String(input?.newPassword || '');
+  const confirmPassword = String(input?.confirmPassword || '');
+  const fieldErrors = {};
+  if (!currentPassword) fieldErrors.currentPassword = 'Current password is required.';
+  if (!newPassword) fieldErrors.newPassword = 'New password is required.';
+  if (!confirmPassword) fieldErrors.confirmPassword = 'Confirm password is required.';
+  if (newPassword && newPassword.length < 10) fieldErrors.newPassword = 'Password must be at least 10 characters.';
+  if (newPassword && confirmPassword && newPassword !== confirmPassword) fieldErrors.confirmPassword = 'Passwords do not match.';
+  if (Object.keys(fieldErrors).length) return { ok: false, fieldErrors };
+
+  const db = ensureDatabase();
+  const user = db.prepare('SELECT password_salt, password_hash FROM users WHERE id = ?').get(userId);
+  if (!user || !verifyPassword(currentPassword, user.password_salt, user.password_hash)) {
+    return { ok: false, fieldErrors: { currentPassword: 'Current password is incorrect.' } };
+  }
+  if (verifyPassword(newPassword, user.password_salt, user.password_hash)) {
+    return { ok: false, fieldErrors: { newPassword: 'Choose a password you have not already been using.' } };
+  }
+
+  const { saltHex, hashHex } = hashPassword(newPassword);
+  db.prepare('UPDATE users SET password_salt = ?, password_hash = ?, updated_at = ? WHERE id = ?')
+    .run(saltHex, hashHex, Date.now(), userId);
+  if (currentSessionToken) {
+    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(userId, currentSessionToken);
+  } else {
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  }
+  return { ok: true };
+}
+
 function normalizeWatchProgress(input) {
   const duration = Number(input?.duration);
   const position = Number(input?.position);
@@ -885,18 +939,58 @@ function closeDatabase() {
   dbInstance = null;
 }
 
+function getDatabaseInfo() {
+  ensureDatabase();
+  const files = [activeDbPath, `${activeDbPath}-wal`, `${activeDbPath}-shm`];
+  return {
+    path: activeDbPath,
+    sizeBytes: files.reduce((sum, filePath) => {
+      try { return sum + fs.statSync(filePath).size; } catch (err) { return sum; }
+    }, 0),
+  };
+}
+
+function createDatabaseBackup(backupDirectory) {
+  const db = ensureDatabase();
+  fs.mkdirSync(backupDirectory, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const destination = path.join(backupDirectory, `my-media-app-${stamp}.sqlite`);
+  const escaped = destination.replace(/'/g, "''");
+  db.exec(`VACUUM INTO '${escaped}'`);
+  return { path: destination, filename: path.basename(destination), sizeBytes: fs.statSync(destination).size, createdAt: Date.now() };
+}
+
+function listDatabaseBackups(backupDirectory) {
+  try {
+    return fs.readdirSync(backupDirectory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^my-media-app-.*\.sqlite$/i.test(entry.name))
+      .map((entry) => {
+        const filePath = path.join(backupDirectory, entry.name);
+        const stats = fs.statSync(filePath);
+        return { filename: entry.name, sizeBytes: stats.size, createdAt: stats.mtimeMs };
+      })
+      .sort((a, b) => b.createdAt - a.createdAt);
+  } catch (err) {
+    return [];
+  }
+}
+
 module.exports = {
   WATCH_COMPLETE_THRESHOLD_PERCENT,
   addFavoriteForUser,
   clearPosterOverrideForUser,
+  changeUserPassword,
+  createDatabaseBackup,
   closeDatabase,
   createUserAccount,
   deleteSessionToken,
   getFavoriteKeyMapForUser,
+  getDatabaseInfo,
   getPosterOverrideMapForUser,
   getUserBySessionToken,
   getWatchProgressMapForUser,
   loginUserAccount,
+  listDatabaseBackups,
   mergeFavoritesForUser,
   mergeFavoritesIntoLibrary,
   mergePosterOverridesForUser,
@@ -907,6 +1001,7 @@ module.exports = {
   removeFavoriteForUser,
   syncLibraryProgressForUser,
   touchSessionToken,
+  updateUserProfile,
   upsertPosterOverrideForUser,
   upsertWatchProgress,
   ensureDatabase,

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MyFlix Projection Booth</title>
+  <link rel="stylesheet" href="/web/admin.css" />
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <a class="admin-brand" href="/desktop">
+        <span class="brand-mark">MF</span>
+        <span><strong>MyFlix</strong><small>Projection Booth</small></span>
+      </a>
+      <nav id="adminNav" class="admin-nav" aria-label="Administration">
+        <button class="active" data-view="overview"><span data-icon="overview"></span>Overview</button>
+        <button data-view="library"><span data-icon="library"></span>Library</button>
+        <button data-view="streams"><span data-icon="streams"></span>Streams</button>
+        <button data-view="jobs"><span data-icon="jobs"></span>Jobs</button>
+        <button data-view="markers"><span data-icon="markers"></span>Playback markers</button>
+        <button data-view="storage"><span data-icon="storage"></span>Storage</button>
+        <button data-view="system"><span data-icon="system"></span>System</button>
+      </nav>
+      <div class="admin-side-footer">
+        <span id="serverPulse" class="server-pulse"></span>
+        <div><strong id="serverState">Connecting</strong><small id="serverHost">MyFlix server</small></div>
+      </div>
+    </aside>
+    <main class="admin-main">
+      <header class="admin-topbar">
+        <div>
+          <small id="viewKicker">OPERATIONS OVERVIEW</small>
+          <h1 id="viewTitle">Projection Booth</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="lastUpdated">Waiting for server</span>
+          <button id="refreshAdmin" class="icon-button" type="button" aria-label="Refresh dashboard" title="Refresh">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M18.4 9A7 7 0 0 0 6.1 6.7L4 9m16 6-2.1 2.3A7 7 0 0 1 5.6 15"/></svg>
+          </button>
+          <a class="lounge-link" href="/desktop">Return to lounge</a>
+        </div>
+      </header>
+      <section id="adminContent" class="admin-content" aria-live="polite">
+        <div class="booth-loader"><span></span><p>Warming up the projection booth...</p></div>
+      </section>
+    </main>
+  </div>
+  <div id="adminToast" class="admin-toast" role="status"></div>
+  <script src="/web/admin.js"></script>
+</body>
+</html>

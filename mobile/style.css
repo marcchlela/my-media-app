@@ -1095,3 +1095,60 @@ body[data-theme="light"] .episode-progress-track {
     grid-template-columns: 1fr;
   }
 }
+
+.mobile-top-actions { display: flex; gap: 6px; }
+.mobile-top-actions .ghost-btn { min-height: 34px; padding: 0 9px; font-size: 10px; }
+.mobile-top-actions .accent { border-color: #9d252c; color: #f2d9b0; background: #6e171d; }
+
+.player-quality-group { position: relative; }
+.quality-button-label { font-size: 8px; font-weight: 700; }
+.player-quality-menu {
+  position: fixed;
+  right: 10px;
+  bottom: 76px;
+  z-index: 30;
+  width: min(210px, 72vw);
+  max-height: 45vh;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid #a67a3d;
+  border-radius: 8px;
+  background: rgba(19, 8, 7, 0.98);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.62);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(12px);
+  pointer-events: none;
+  transition: 180ms ease;
+}
+.player-quality-menu.open { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
+.player-quality-menu button { width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 11px 9px; border: 0; border-bottom: 1px solid #44251c; color: #ead7b7; background: transparent; text-align: left; }
+.player-quality-menu button.active { background: #70191f; }
+.player-quality-menu button small { color: #a7957a; font-size: 8px; }
+.quality-menu-note { display: block; padding: 11px; color: #b8a78c; font-size: 10px; }
+.player-marker-action { position: absolute; right: 12px; bottom: 82px; z-index: 12; min-height: 37px; padding: 0 14px; border: 1px solid #d0a052; border-radius: 5px; color: #fff0d6; background: linear-gradient(#861c25, #590d14); box-shadow: 0 7px 18px #0008; }
+
+.mobile-feature-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-end; background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(5px); }
+.mobile-feature-sheet { width: 100%; max-height: 88vh; overflow-y: auto; padding: 18px; border-top: 2px solid #bd8c46; border-radius: 18px 18px 0 0; color: #f0dfc2; background: linear-gradient(145deg, #2a130f, #100706); }
+.mobile-feature-sheet header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #5b3820; }
+.mobile-feature-sheet h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 500; }
+.mobile-feature-body { display: grid; gap: 12px; padding-top: 16px; }
+.mobile-feature-input { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #7c552c; border-radius: 8px; color: #efddbe; background: #100706; font: inherit; }
+.mobile-wheel { width: min(270px, 70vw); aspect-ratio: 1; justify-self: center; border: 9px solid #bc8944; border-radius: 50%; color: #f2d69b; background: repeating-conic-gradient(#71191f 0 30deg, #20100c 30deg 60deg); box-shadow: 0 18px 36px #0008, inset 0 0 28px #0008; }
+.mobile-wheel span { display: inline-grid; place-items: center; width: 34%; aspect-ratio: 1; border: 2px solid #cf9f51; border-radius: 50%; background: #32130f; }
+.mobile-wheel.spinning { animation: mobile-wheel-spin 1.3s cubic-bezier(0.12, 0.74, 0.16, 1); }
+@keyframes mobile-wheel-spin { to { transform: rotate(5turn); } }
+.mobile-wheel-result { min-height: 45px; color: #dfc89f; text-align: center; font: 500 21px/1.25 Georgia, "Times New Roman", serif; }
+.mobile-suggestion-controls { display: grid; grid-template-columns: 105px 1fr auto; gap: 7px; }
+.mobile-suggestion-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.mobile-suggestion-result { min-width: 0; padding: 5px; border: 1px solid #62401f; color: #ead8ba; text-align: left; background: #120705; }
+.mobile-suggestion-result.selected { border-color: #dfad5d; box-shadow: 0 0 0 2px #771b22; }
+.mobile-suggestion-result img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; }
+.mobile-suggestion-result span { display: block; padding: 7px 3px; font-size: 10px; }
+
+@media (max-width: 430px) {
+  .mobile-top-actions .ghost-btn { font-size: 0; width: 34px; padding: 0; }
+  #movieNightBtn::after { content: "MN"; font-size: 9px; }
+  #suggestionBtn::after { content: "+"; font-size: 17px; }
+  .mobile-suggestion-controls { grid-template-columns: 1fr; }
+}

@@ -9,7 +9,22 @@ process.env.DATA_DIR = path.join(root, 'data');
 process.env.ADMIN_EMAILS = '';
 
 const { closeDatabase } = require('../account-store');
-const { MediaScanner } = require('../media-scanner');
+const { MediaScanner, detectChapterPlaybackMarkers } = require('../media-scanner');
+
+test('chapter markers prefer named chapters and estimate credits conservatively', () => {
+  const named = detectChapterPlaybackMarkers([
+    { start_time: '12.5', end_time: '98.25', tags: { title: 'Opening Theme' } },
+    { start_time: '2460', end_time: '2520', tags: { title: 'End Credits' } },
+  ], 2520);
+  assert.equal(named.introStart, 12.5);
+  assert.equal(named.introEnd, 98.25);
+  assert.equal(named.creditsStart, 2460);
+  assert.equal(named.markerSource, 'chapter');
+
+  const estimated = detectChapterPlaybackMarkers([], 1800);
+  assert.equal(estimated.creditsStart, 1725);
+  assert.equal(estimated.markerSource, 'duration-estimate');
+});
 const { getDb, getPublicLibrary } = require('../media-store');
 
 test.after(() => {
@@ -65,5 +80,5 @@ test('scanner is incremental, keeps stable IDs, and preserves offline catalogs',
 });
 
 test('catalog schema migration version is recorded', () => {
-  assert.ok(Number(getDb().prepare('PRAGMA user_version').get().user_version) >= 4);
+  assert.ok(Number(getDb().prepare('PRAGMA user_version').get().user_version) >= 5);
 });

@@ -35,7 +35,16 @@ test.before(async () => {
     inspectMedia: async () => ({ durationSeconds: 60, width: 1280, height: 720 }),
   });
   await scanner.scan();
-  const created = createApp({ scanner });
+  const created = createApp({
+    scanner,
+    tools: {
+      ffmpeg: { available: false, path: 'ffmpeg' },
+      fingerprint: { available: false, path: 'fpcalc' },
+      encoders: { software: false, intelQsv: false, nvidiaNvenc: false, vaapi: false },
+      gpuDeviceAvailable: false,
+      recommendedEncoder: 'libx264',
+    },
+  });
   server = await new Promise((resolve) => {
     const listener = created.app.listen(0, '127.0.0.1', () => resolve(listener));
   });
@@ -55,6 +64,16 @@ test('health and library responses are safe', async () => {
   assert.equal(library.length, 1);
   assert.equal(Object.hasOwn(library[0], 'path'), false);
   assert.equal(JSON.stringify(library).includes(root), false);
+});
+
+test('mobile and desktop serve the same responsive Electric Lounge client', async () => {
+  const [desktop, mobile] = await Promise.all([
+    fetch(`${baseUrl}/desktop`).then((response) => response.text()),
+    fetch(`${baseUrl}/mobile`).then((response) => response.text()),
+  ]);
+  assert.equal(mobile, desktop);
+  assert.match(mobile, /electric-lounge/);
+  assert.match(mobile, /app\.js/);
 });
 
 test('ID streaming supports Range and rejects legacy path routes', async () => {
@@ -98,6 +117,187 @@ test('metadata management endpoints are admin-only', async () => {
   assert.equal(denied.status, 403);
   assert.equal(admin.status, 503);
   assert.equal(metadataStatus.status, 200);
+});
+
+test('signed-in users can update their profile name', async () => {
+  const response = await fetch(`${baseUrl}/api/account/profile`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${normalSessionToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ firstName: 'Updated', lastName: 'Viewer' }),
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.user.fullName, 'Updated Viewer');
+  assert.equal(payload.user.email, 'viewer@example.com');
+});
+
+test('account password changes and viewing statistics are account-scoped', async () => {
+  const [movie] = await fetch(`${baseUrl}/api/library`).then((response) => response.json());
+  const progress = await fetch(`${baseUrl}/api/account/progress`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${normalSessionToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ mediaId: movie.id, position: 30, duration: 60 }),
+  });
+  assert.equal(progress.status, 200);
+
+  const statsResponse = await fetch(`${baseUrl}/api/account/stats`, {
+    headers: { Authorization: `Bearer ${normalSessionToken}` },
+  });
+  const stats = await statsResponse.json();
+  assert.equal(statsResponse.status, 200);
+  assert.equal(stats.stats.watchedSeconds, 30);
+  assert.equal(stats.stats.moviesWatched, 0);
+
+  const change = await fetch(`${baseUrl}/api/account/password`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${normalSessionToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      currentPassword: 'strong-pass-123',
+      newPassword: 'even-stronger-pass-456',
+      confirmPassword: 'even-stronger-pass-456',
+    }),
+  });
+  assert.equal(change.status, 200);
+
+  const login = (password) => fetch(`${baseUrl}/api/account/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'viewer@example.com', password }),
+  });
+  assert.equal((await login('strong-pass-123')).status, 401);
+  assert.equal((await login('even-stronger-pass-456')).status, 200);
+});
+
+test('TMDB poster image routes are installed', async () => {
+  const movie = await fetch(`${baseUrl}/api/tmdb/movie/1/images`);
+  const show = await fetch(`${baseUrl}/api/tmdb/tv/1/images`);
+  assert.notEqual(movie.status, 404);
+  assert.notEqual(show.status, 404);
+});
+
+test('custom poster uploads are account-scoped and resettable', async () => {
+  const [movie] = await fetch(`${baseUrl}/api/library`).then((response) => response.json());
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+  const upload = await fetch(`${baseUrl}/api/account/poster-upload?type=movie&id=${encodeURIComponent(movie.id)}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${normalSessionToken}`,
+      'Content-Type': 'image/png',
+    },
+    body: png,
+  });
+  const payload = await upload.json();
+  assert.equal(upload.status, 200);
+  assert.match(payload.posterPath, /^\/api\/account\/poster-file\//);
+  const poster = await fetch(`${baseUrl}${payload.posterPath}`, {
+    headers: { Authorization: `Bearer ${normalSessionToken}` },
+  });
+  assert.equal(poster.status, 200);
+
+  const reset = await fetch(`${baseUrl}/api/account/poster`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${normalSessionToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ mediaId: movie.id }),
+  });
+  assert.equal(reset.status, 200);
+});
+
+test('catalog management is admin-only and visibility is reversible', async () => {
+  const denied = await fetch(`${baseUrl}/api/admin/library/manage`, {
+    headers: { Authorization: `Bearer ${normalSessionToken}` },
+  });
+  const allowed = await fetch(`${baseUrl}/api/admin/library/manage`, {
+    headers: { Authorization: `Bearer ${adminSessionToken}` },
+  });
+  const payload = await allowed.json();
+  const movie = payload.library.movies[0];
+  assert.equal(denied.status, 403);
+  assert.equal(allowed.status, 200);
+  assert.ok(movie.id);
+
+  const setVisibility = (hidden) => fetch(`${baseUrl}/api/admin/library/visibility`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${adminSessionToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ scope: 'movie', id: movie.id, hidden }),
+  });
+  assert.equal((await setVisibility(true)).status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/library`).then((response) => response.json())).length, 0);
+  assert.equal((await setVisibility(false)).status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/library`).then((response) => response.json())).length, 1);
+});
+
+test('playback quality options preserve direct play when FFmpeg is unavailable', async () => {
+  const [movie] = await fetch(`${baseUrl}/api/library`).then((response) => response.json());
+  const optionsResponse = await fetch(`${baseUrl}/api/media/${movie.id}/playback-options`);
+  const options = await optionsResponse.json();
+  assert.equal(optionsResponse.status, 200);
+  assert.equal(options.directPlay, true);
+  assert.equal(options.hlsAvailable, false);
+  assert.deepEqual(options.qualities.map((quality) => quality.label), ['720p', '480p', '360p']);
+  const hls = await fetch(`${baseUrl}/api/media/${movie.id}/hls`, { method: 'POST' });
+  assert.equal(hls.status, 503);
+});
+
+test('stream heartbeats appear only in the admin stream monitor', async () => {
+  const [movie] = await fetch(`${baseUrl}/api/library`).then((response) => response.json());
+  const heartbeat = await fetch(`${baseUrl}/api/playback/session`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${normalSessionToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mediaId: movie.id, title: movie.title, mode: 'direct', quality: 'Original', position: 12, duration: 60 }),
+  }).then((response) => response.json());
+  assert.match(heartbeat.sessionId, /^stream_/);
+  assert.equal((await fetch(`${baseUrl}/api/admin/streams`, { headers: { Authorization: `Bearer ${normalSessionToken}` } })).status, 403);
+  const admin = await fetch(`${baseUrl}/api/admin/streams`, { headers: { Authorization: `Bearer ${adminSessionToken}` } }).then((response) => response.json());
+  assert.equal(admin.streams.length, 1);
+  assert.equal(admin.streams[0].userName, 'Updated Viewer');
+});
+
+test('title suggestions are account-scoped and reviewable by administrators', async () => {
+  const submitted = await fetch(`${baseUrl}/api/account/suggestions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${normalSessionToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mediaType: 'movie', title: 'Example Feature', tmdbId: 123, posterPath: '/poster.jpg', releaseDate: '2026-01-01' }),
+  });
+  assert.equal(submitted.status, 201);
+  const mine = await fetch(`${baseUrl}/api/account/suggestions`, { headers: { Authorization: `Bearer ${normalSessionToken}` } }).then((response) => response.json());
+  assert.equal(mine.suggestions.length, 1);
+  assert.equal(mine.suggestions[0].title, 'Example Feature');
+  assert.equal((await fetch(`${baseUrl}/api/admin/suggestions`, { headers: { Authorization: `Bearer ${normalSessionToken}` } })).status, 403);
+  const admin = await fetch(`${baseUrl}/api/admin/suggestions`, { headers: { Authorization: `Bearer ${adminSessionToken}` } }).then((response) => response.json());
+  const suggestion = admin.suggestions.find((entry) => entry.title === 'Example Feature');
+  assert.ok(suggestion);
+  const approved = await fetch(`${baseUrl}/api/admin/suggestions/${suggestion.id}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${adminSessionToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'approved' }),
+  });
+  assert.equal(approved.status, 200);
+});
+
+test('admin overview is protected and reports server capabilities', async () => {
+  assert.equal((await fetch(`${baseUrl}/api/admin/overview`)).status, 401);
+  assert.equal((await fetch(`${baseUrl}/api/admin/overview`, { headers: { Authorization: `Bearer ${normalSessionToken}` } })).status, 403);
+  const response = await fetch(`${baseUrl}/api/admin/overview`, { headers: { Authorization: `Bearer ${adminSessionToken}` } });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.system.tools.ffmpeg.available, false);
+  assert.ok(Array.isArray(payload.warnings));
+  assert.ok(payload.storage.database.sizeBytes > 0);
 });
 
 test('cross-origin requests are denied unless configured', async () => {

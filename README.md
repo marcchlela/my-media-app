@@ -1,6 +1,6 @@
 # MyFlix
 
-MyFlix is a self-hosted media catalog with desktop web, mobile web, and Electron clients. The production server directly streams existing media files and does not perform video transcoding.
+MyFlix is a self-hosted media catalog with desktop web, mobile web, and Electron clients. Original-quality direct play remains the default; the server can also generate reusable adaptive HLS quality variants on demand.
 
 ## Architecture
 
@@ -8,7 +8,10 @@ MyFlix is a self-hosted media catalog with desktop web, mobile web, and Electron
 - SQLite stores the catalog, accounts, sessions, favorites, poster overrides, watch progress, cached metadata, and availability state.
 - Server clients receive stable media/show IDs. Absolute server paths are never returned by the library API.
 - `ffprobe` runs only when a file is new or changed. It records duration, codecs, container, and dimensions.
-- Streaming uses the original file with HTTP byte ranges. Unsupported browser codecs are reported by the player rather than transcoded.
+- Original playback uses HTTP byte ranges with no conversion.
+- Choosing Auto or a specific quality asks FFmpeg to generate cached HLS variants under `DATA_DIR/cache/hls`. The first request takes time; later playback reuses the cache until the source file changes.
+- Chromaprint compares audio fingerprints across episodes in a season to detect recurring intros. Manual markers always remain authoritative.
+- `/admin` is an administrator-only operations dashboard for library, streams, jobs, markers, storage, backups, and server health.
 
 `library.json` is not a server runtime source. On first startup, an existing file may be imported once to preserve IDs/metadata where practical. SQLite remains authoritative afterward.
 
@@ -17,6 +20,8 @@ MyFlix is a self-hosted media catalog with desktop web, mobile web, and Electron
 ### Server mode
 
 Run `npm run server` or Docker. The SQLite catalog under `DATA_DIR` is authoritative. Web clients use `/api/library`, and media streams use `/api/media/:id/stream`.
+
+`/desktop` and `/mobile` serve one responsive Electric Lounge client. Screen-size rules change navigation, poster sizing, rails, and dialogs without maintaining two separate feature implementations.
 
 When Electron has `SHARED_SERVER_URL` configured, the server catalog is authoritative for every user, including administrators. Local import controls are disabled; use **Settings > Rescan Server Library**.
 
@@ -28,7 +33,7 @@ Run `npm start`. Without `SHARED_SERVER_URL`, the existing local Electron librar
 
 - Node.js 22.5 or newer for `node:sqlite`.
 - Docker Engine with Compose for the recommended Ubuntu deployment.
-- No FFmpeg transcoding service or hardware acceleration is required.
+- The Docker image includes FFmpeg and Chromaprint. Direct play works without transcoding; adaptive quality and fingerprint detection require those tools.
 
 ## Ubuntu preparation
 
@@ -62,10 +67,16 @@ docker compose logs -f myflix
 
 5. Open `http://192.168.1.115:3000/desktop`.
 6. Sign up using an email listed in `ADMIN_EMAILS`.
-7. Open Account and use **Rescan Library** if the startup scan has not finished.
+7. Open `/admin` to monitor the startup scan, media analysis, and server status.
 8. After creating the intended accounts, set `ALLOW_SIGNUP=false` and run `docker compose up -d` again if you want closed registration.
 
 Health information is available at `/health`. It contains catalog counts and source availability, but no paths or secrets.
+
+### Adaptive quality and hardware acceleration
+
+`TRANSCODE_ACCEL=auto` prefers a usable hardware encoder and falls back to `libx264`. `TRANSCODE_CONCURRENCY=1` protects a small homelab from running several expensive encodes simultaneously. Adaptive outputs are generated once, cached, and reused; this is not continuous live transcoding on every playback.
+
+For Intel or AMD graphics on Linux, expose the render device by uncommenting the `/dev/dri` device mapping in `compose.yaml`. Confirm the result under **Admin > System**. NVIDIA requires the NVIDIA container runtime in addition to FFmpeg encoder support.
 
 ## Media naming
 
@@ -92,7 +103,7 @@ Subtitle matching considers same-directory names, nearby `Subtitles` folders, no
 ## Rescanning and unavailable media
 
 - Startup scanning is controlled by `SCAN_ON_STARTUP`.
-- Administrators can start and monitor scans from web/mobile Account or Electron Settings.
+- Administrators can start and monitor scans from `/admin`, web Settings, or Electron Settings.
 - New and changed files are inspected; unchanged size/mtime entries are not re-probed.
 - Unchanged entries that are missing TMDB data can be enriched without running `ffprobe` again.
 - Missing files are marked unavailable, never automatically deleted.
@@ -120,7 +131,9 @@ Administrators can use **Fix Metadata** from a movie or show details page to sea
 
 The Account page's **Library Management** panel provides **Refresh Missing Metadata**. This background job only targets catalog rows missing a TMDB match or poster. It does not scan video contents, run `ffprobe`, or modify media files.
 
-Catalog schema version 4 adds private filename-derived source titles used by reset and matching. The migration is additive and preserves media IDs, accounts, progress, favorites, poster overrides, and existing metadata.
+Catalog schema version 7 adds marker confidence and analysis provenance, subtitle visibility controls, and account-scoped media suggestions. The migration is additive and preserves media IDs, accounts, progress, favorites, poster overrides, and existing metadata.
+
+Administrators can open **Settings > Library Management** or `/admin` to rescan, refresh metadata, hide or remove catalog entries without deleting media files, manage subtitles, and review intro/credits markers. Rescans read named chapters, reuse season timing templates, conservatively estimate credits, and schedule season-level audio fingerprint analysis. Manual timings remain authoritative. Users can edit their profile name, change their password, view account-scoped statistics, suggest exact TMDB titles, and choose a per-account TMDB or uploaded custom poster from movie/show details.
 
 ## Backups and restore
 
@@ -130,7 +143,7 @@ Back up the complete directory:
 /srv/myflix/data
 ```
 
-It contains the SQLite database and generated caches. Videos are not duplicated into this directory. For a consistent live backup, stop the container first or copy the SQLite database together with its `-wal` and `-shm` files.
+It contains the SQLite database and generated caches. Videos are not duplicated into this directory. **Admin > Storage** can create a consistent SQLite snapshot while MyFlix is running; a full filesystem backup can still be made while the container is stopped.
 
 Restore by stopping MyFlix, replacing `/srv/myflix/data` from backup, ensuring UID 1000 can write it, and starting the container again.
 

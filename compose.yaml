@@ -19,6 +19,10 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       SCAN_ON_STARTUP: ${SCAN_ON_STARTUP:-true}
+      TRANSCODE_ACCEL: ${TRANSCODE_ACCEL:-auto}
+      TRANSCODE_CONCURRENCY: ${TRANSCODE_CONCURRENCY:-1}
+      FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
+      FPCALC_PATH: ${FPCALC_PATH:-fpcalc}
       ENABLE_LEGACY_PATH_ROUTES: "false"
     volumes:
       - /srv/myflix/data:/data
@@ -28,3 +32,6 @@ services:
       - /tmp:size=64m
     security_opt:
       - no-new-privileges:true
+    # Intel/AMD hardware transcoding: uncomment when /dev/dri exists on the host.
+    # devices:
+    #   - /dev/dri:/dev/dri

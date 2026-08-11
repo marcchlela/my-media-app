@@ -11,7 +11,8 @@ const searchInput = document.getElementById('searchInput');
 const mobileFiltersWrap = document.querySelector('.mobile-filters');
 const mobileGenreFilter = document.getElementById('mobileGenreFilter');
 const mobileSortFilter = document.getElementById('mobileSortFilter');
-const refreshBtn = document.getElementById('refreshBtn');
+const movieNightBtn = document.getElementById('movieNightBtn');
+const suggestionBtn = document.getElementById('suggestionBtn');
 const homeBtn = document.getElementById('homeBtn');
 const mobileNav = document.getElementById('mobileNav');
 
@@ -29,6 +30,12 @@ const timelineRange = document.getElementById('timelineRange');
 const muteBtn = document.getElementById('muteBtn');
 const volumeRange = document.getElementById('volumeRange');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
+const skipIntroBtn = document.getElementById('skipIntroBtn');
+const nextEpisodeBtn = document.getElementById('nextEpisodeBtn');
+const qualityGroup = document.getElementById('qualityGroup');
+const qualityBtn = document.getElementById('qualityBtn');
+const qualityButtonLabel = document.getElementById('qualityButtonLabel');
+const qualityMenu = document.getElementById('qualityMenu');
 const subtitleControls = document.getElementById('subtitleControls');
 const playerStatus = document.getElementById('playerStatus');
 const PLAYER_CONTROLS_HIDE_MS = 2200;
@@ -43,8 +50,16 @@ let searchRenderTimer = null;
 let currentUser = null;
 let allowSignup = true;
 let currentPlayerItem = null;
+let currentPlayerNextEpisode = null;
 let playerControlsHideTimer = null;
 let playerClickToggleTimer = null;
+let activeHls = null;
+let playbackOptions = null;
+let selectedPlaybackQuality = 'Original';
+let qualityRequestToken = 0;
+let streamSessionId = '';
+let streamHeartbeatTimer = null;
+let playbackMode = 'direct';
 
 const movieDetailCache = new Map();
 const showDetailCache = new Map();
@@ -2219,9 +2234,181 @@ function scheduleRenderCurrentView() {
   });
 }
 
+function destroyAdaptivePlayback() {
+  qualityRequestToken += 1;
+  activeHls?.destroy();
+  activeHls = null;
+}
+
+function updateQualityButton(label) {
+  selectedPlaybackQuality = label || 'Original';
+  qualityButtonLabel.textContent = selectedPlaybackQuality === 'Original' ? 'SRC' : selectedPlaybackQuality === 'Auto' ? 'AUTO' : selectedPlaybackQuality.replace('p', '');
+  qualityMenu.querySelectorAll('button').forEach((button) => button.classList.toggle('active', button.dataset.quality === selectedPlaybackQuality));
+}
+
+function renderQualityMenu(options = null) {
+  qualityMenu.innerHTML = '';
+  if (!options?.hlsAvailable) {
+    const note = document.createElement('span');
+    note.className = 'quality-menu-note';
+    note.textContent = options ? 'Original quality only' : 'Checking server...';
+    qualityMenu.appendChild(note);
+    qualityBtn.disabled = !options;
+    return;
+  }
+  qualityBtn.disabled = false;
+  ['Original', 'Auto', ...(options.qualities || []).map((quality) => quality.label)].forEach((label) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.quality = label;
+    const title = document.createElement('strong');
+    title.textContent = label;
+    const detail = document.createElement('small');
+    detail.textContent = label === 'Original' ? 'Direct play' : label === 'Auto' ? 'Adapts to connection' : 'Adaptive stream';
+    button.append(title, detail);
+    button.addEventListener('click', () => selectPlaybackQuality(label));
+    qualityMenu.appendChild(button);
+  });
+  updateQualityButton(selectedPlaybackQuality);
+}
+
+function restoreDirectPlayback() {
+  if (!currentPlayerItem) return;
+  const resumeAt = Number(player.currentTime) || 0;
+  const shouldPlay = !player.paused;
+  destroyAdaptivePlayback();
+  playbackMode = 'direct';
+  player.src = currentPlayerItem.streamUrl;
+  player.load();
+  player.addEventListener('loadedmetadata', () => {
+    if (resumeAt > 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(resumeAt, Math.max(0, player.duration - 0.1));
+    if (shouldPlay) player.play().catch(() => {});
+  }, { once: true });
+  updateQualityButton('Original');
+  setPlayerStatus('');
+}
+
+function attachAdaptivePlayback(masterUrl, quality, token) {
+  if (!currentPlayerItem || token !== qualityRequestToken) return;
+  const resumeAt = Number(player.currentTime) || 0;
+  const shouldPlay = !player.paused;
+  activeHls?.destroy();
+  playbackMode = quality === 'Auto' ? 'hls-auto' : 'hls-manual';
+  if (window.Hls?.isSupported()) {
+    const hls = new window.Hls({ startPosition: resumeAt, enableWorker: true });
+    activeHls = hls;
+    hls.attachMedia(player);
+    hls.on(window.Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(masterUrl));
+    hls.on(window.Hls.Events.MANIFEST_PARSED, (_event, data) => {
+      if (quality === 'Auto') hls.currentLevel = -1;
+      else {
+        const height = Number.parseInt(quality, 10);
+        const level = (data.levels || []).findIndex((entry) => Number(entry.height) === height);
+        if (level >= 0) hls.currentLevel = level;
+      }
+      if (resumeAt > 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(resumeAt, Math.max(0, player.duration - 0.1));
+      if (shouldPlay) player.play().catch(() => {});
+      setPlayerStatus('');
+      sendStreamHeartbeat();
+    });
+    hls.on(window.Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) restoreDirectPlayback();
+    });
+  } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
+    player.src = masterUrl;
+    player.load();
+  } else {
+    setPlayerStatus('Adaptive playback is not supported on this device.', true);
+    restoreDirectPlayback();
+    return;
+  }
+  updateQualityButton(quality);
+}
+
+async function selectPlaybackQuality(quality) {
+  qualityMenu.classList.remove('open');
+  qualityBtn.setAttribute('aria-expanded', 'false');
+  if (quality === 'Original') return restoreDirectPlayback();
+  if (!currentPlayerItem || !playbackOptions?.hlsAvailable) return;
+  const token = ++qualityRequestToken;
+  updateQualityButton(quality);
+  setPlayerStatus('Preparing adaptive qualities...');
+  try {
+    let response = await apiRequest(`/api/media/${encodeURIComponent(currentPlayerItem.id)}/hls`, { method: 'POST', body: {} });
+    let status = response.status;
+    while (status?.state !== 'ready') {
+      if (token !== qualityRequestToken || !currentPlayerItem) return;
+      if (status?.state === 'failed') throw new Error(status.error || 'Adaptive stream generation failed.');
+      setPlayerStatus(`${status?.message || 'Generating stream'}${Number.isFinite(status?.progress) ? ` (${Math.round(status.progress)}%)` : ''}`);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      response = await apiRequest(`/api/media/${encodeURIComponent(currentPlayerItem.id)}/hls/status`);
+      status = response.status;
+    }
+    attachAdaptivePlayback(status.masterUrl, quality, token);
+  } catch (error) {
+    if (token === qualityRequestToken) setPlayerStatus(error.message || 'Could not prepare this quality.', true);
+  }
+}
+
+async function loadPlaybackOptions(item) {
+  playbackOptions = null;
+  selectedPlaybackQuality = 'Original';
+  renderQualityMenu();
+  try {
+    const response = await apiRequest(`/api/media/${encodeURIComponent(item.id)}/playback-options`);
+    if (currentPlayerItem?.id === item.id) {
+      playbackOptions = response;
+      renderQualityMenu(response);
+    }
+  } catch (error) {
+    if (currentPlayerItem?.id === item.id) renderQualityMenu({ hlsAvailable: false });
+  }
+}
+
+function clearStreamHeartbeat() {
+  clearInterval(streamHeartbeatTimer);
+  streamHeartbeatTimer = null;
+  if (streamSessionId) fetch(`/api/playback/session/${encodeURIComponent(streamSessionId)}`, { method: 'DELETE', keepalive: true }).catch(() => {});
+  streamSessionId = '';
+}
+
+async function sendStreamHeartbeat() {
+  if (!currentPlayerItem) return;
+  try {
+    const response = await apiRequest('/api/playback/session', { method: 'POST', body: {
+      sessionId: streamSessionId,
+      mediaId: currentPlayerItem.id,
+      title: currentPlayerItem.title || currentPlayerItem.name,
+      mode: playbackMode,
+      quality: selectedPlaybackQuality,
+      position: Number(player.currentTime) || 0,
+      duration: Number(player.duration) || 0,
+      paused: player.paused,
+    } });
+    streamSessionId = response.sessionId || streamSessionId;
+  } catch (error) { /* Playback remains independent of telemetry. */ }
+}
+
+function startStreamHeartbeat() {
+  clearStreamHeartbeat();
+  sendStreamHeartbeat();
+  streamHeartbeatTimer = setInterval(sendStreamHeartbeat, 10_000);
+}
+
 function openPlayer(item) {
   if (!item.streamUrl) return;
+  destroyAdaptivePlayback();
+  clearStreamHeartbeat();
   currentPlayerItem = item;
+  currentPlayerNextEpisode = null;
+  if (item.isShow && item.showId) {
+    const episodes = libraryItems
+      .filter((entry) => entry.isShow && entry.showId === item.showId)
+      .sort((first, second) => ((first.episode?.season || 0) - (second.episode?.season || 0)) || ((first.episode?.episode || 0) - (second.episode?.episode || 0)));
+    const index = episodes.findIndex((entry) => entry.id === item.id);
+    currentPlayerNextEpisode = index >= 0 ? episodes[index + 1] || null : null;
+  }
+  playbackMode = 'direct';
   setPlayerStatus('');
   subtitleControls.innerHTML = '';
   subtitleControls.classList.add('hidden');
@@ -2272,9 +2459,10 @@ function openPlayer(item) {
   player.ontimeupdate = () => {
     persist(false);
     syncPlayerControls();
+    updatePlayerMarkerActions();
   };
-  player.onpause = () => persist(false);
-  player.onended = () => persist(true);
+  player.onpause = () => { persist(false); sendStreamHeartbeat(); };
+  player.onended = () => { persist(true); sendStreamHeartbeat(); };
 
   if (subtitles.length) {
     subtitleControls.classList.remove('hidden');
@@ -2352,6 +2540,9 @@ function openPlayer(item) {
 
   player.load();
   playerView.classList.remove('hidden');
+  updatePlayerMarkerActions();
+  loadPlaybackOptions(item);
+  startStreamHeartbeat();
   syncPlayerControls();
   showPlayerControls(false);
   player.play().catch(() => {
@@ -2367,6 +2558,8 @@ function closePlayer() {
     }
   }
 
+  clearStreamHeartbeat();
+  destroyAdaptivePlayback();
   player.pause();
   player.removeAttribute('src');
   player.load();
@@ -2384,6 +2577,12 @@ function closePlayer() {
   setPlayerStatus('');
   playerView.classList.add('hidden');
   currentPlayerItem = null;
+  currentPlayerNextEpisode = null;
+  skipIntroBtn.classList.add('hidden');
+  nextEpisodeBtn.classList.add('hidden');
+  playbackOptions = null;
+  qualityMenu.classList.remove('open');
+  updateQualityButton('Original');
   clearPlayerControlsHideTimer();
   if (playerClickToggleTimer) {
     clearTimeout(playerClickToggleTimer);
@@ -2391,6 +2590,151 @@ function closePlayer() {
   }
   playerStage.classList.add('controls-visible');
   syncPlayerControls();
+}
+
+function updatePlayerMarkerActions() {
+  const markers = currentPlayerItem?.playbackMarkers || {};
+  const time = Number(player.currentTime) || 0;
+  const showIntro = Number.isFinite(markers.introStart) && Number.isFinite(markers.introEnd) && markers.introEnd > markers.introStart && time >= markers.introStart && time < markers.introEnd;
+  const showNext = !!currentPlayerNextEpisode && Number.isFinite(markers.creditsStart) && time >= markers.creditsStart;
+  skipIntroBtn.classList.toggle('hidden', !showIntro);
+  nextEpisodeBtn.classList.toggle('hidden', !showNext);
+}
+
+function createFeatureSheet(title) {
+  const overlay = document.createElement('div');
+  overlay.className = 'mobile-feature-overlay';
+  const sheet = document.createElement('section');
+  sheet.className = 'mobile-feature-sheet';
+  const header = document.createElement('header');
+  const heading = document.createElement('h2');
+  heading.textContent = title;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'ghost-btn';
+  close.textContent = 'Close';
+  header.append(heading, close);
+  const body = document.createElement('div');
+  body.className = 'mobile-feature-body';
+  sheet.append(header, body);
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  const dismiss = () => overlay.remove();
+  close.addEventListener('click', dismiss);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) dismiss(); });
+  return { body, dismiss };
+}
+
+function openMobileMovieNight() {
+  const { body, dismiss } = createFeatureSheet('Movie Night');
+  const type = document.createElement('select');
+  type.className = 'mobile-feature-input';
+  type.innerHTML = '<option value="all">Movies & shows</option><option value="movie">Movies only</option><option value="show">Shows only</option>';
+  const spin = document.createElement('button');
+  spin.type = 'button';
+  spin.className = 'mobile-wheel';
+  spin.innerHTML = '<span>SPIN</span>';
+  const result = document.createElement('div');
+  result.className = 'mobile-wheel-result';
+  result.textContent = 'Let the lounge choose tonight.';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'solid-btn hidden';
+  open.textContent = 'View selection';
+  body.append(type, spin, result, open);
+  let selected = null;
+  spin.addEventListener('click', () => {
+    let choices = [
+      ...getMovieItems().map((item) => ({ type: 'movie', title: item.title || item.name, item })),
+      ...getShowGroups().map((group) => ({ type: 'show', title: group.name, item: group })),
+    ];
+    if (type.value !== 'all') choices = choices.filter((entry) => entry.type === type.value);
+    if (!choices.length) { result.textContent = 'Nothing matches that filter yet.'; return; }
+    selected = choices[Math.floor(Math.random() * choices.length)];
+    spin.classList.remove('spinning');
+    void spin.offsetWidth;
+    spin.classList.add('spinning');
+    window.setTimeout(() => {
+      result.textContent = selected.title;
+      open.classList.remove('hidden');
+    }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 50 : 1300);
+  });
+  open.addEventListener('click', () => {
+    if (!selected) return;
+    dismiss();
+    if (selected.type === 'movie') openMovieDetails(selected.item);
+    else openShowDetails(selected.item);
+  });
+}
+
+function openMobileSuggestion() {
+  if (!currentUser) { openAuthModal('login'); return; }
+  const { body, dismiss } = createFeatureSheet('Suggest a title');
+  const controls = document.createElement('div');
+  controls.className = 'mobile-suggestion-controls';
+  const type = document.createElement('select');
+  type.className = 'mobile-feature-input';
+  type.innerHTML = '<option value="movie">Movie</option><option value="show">TV show</option>';
+  const query = document.createElement('input');
+  query.className = 'mobile-feature-input';
+  query.type = 'search';
+  query.placeholder = 'Title name';
+  const search = document.createElement('button');
+  search.type = 'button';
+  search.className = 'solid-btn';
+  search.textContent = 'Search';
+  controls.append(type, query, search);
+  const message = document.createElement('p');
+  const results = document.createElement('div');
+  results.className = 'mobile-suggestion-results';
+  const note = document.createElement('textarea');
+  note.className = 'mobile-feature-input hidden';
+  note.placeholder = 'Optional note';
+  const submit = document.createElement('button');
+  submit.className = 'solid-btn hidden';
+  submit.textContent = 'Send suggestion';
+  body.append(controls, message, results, note, submit);
+  let selected = null;
+  search.addEventListener('click', async () => {
+    if (!query.value.trim()) { message.textContent = 'Enter a title first.'; return; }
+    results.innerHTML = '';
+    message.textContent = 'Searching TMDB...';
+    try {
+      const payload = await apiGet(`/api/tmdb/${type.value === 'show' ? 'tv' : 'movie'}/search`, { q: query.value.trim() });
+      const matches = (payload.results || []).slice(0, 8);
+      message.textContent = matches.length ? 'Choose the exact version.' : 'No matches found.';
+      matches.forEach((match) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'mobile-suggestion-result';
+        if (match.poster_path) {
+          const image = document.createElement('img');
+          image.src = `${TMDB_IMG}${match.poster_path}`;
+          image.alt = '';
+          button.appendChild(image);
+        }
+        const label = document.createElement('span');
+        label.textContent = `${match.title || match.name} · ${String(match.release_date || match.first_air_date || '').slice(0, 4) || 'Unknown year'}`;
+        button.appendChild(label);
+        button.addEventListener('click', () => {
+          results.querySelectorAll('button').forEach((entry) => entry.classList.remove('selected'));
+          button.classList.add('selected');
+          selected = { mediaType: type.value, title: match.title || match.name, tmdbId: match.id, posterPath: match.poster_path || null, releaseDate: match.release_date || match.first_air_date || null };
+          note.classList.remove('hidden');
+          submit.classList.remove('hidden');
+        });
+        results.appendChild(button);
+      });
+    } catch (error) { message.textContent = error.message || 'TMDB search failed.'; }
+  });
+  submit.addEventListener('click', async () => {
+    if (!selected) return;
+    submit.disabled = true;
+    try {
+      await apiRequest('/api/account/suggestions', { method: 'POST', body: { ...selected, note: note.value.trim() } });
+      dismiss();
+    } catch (error) { message.textContent = error.message; submit.disabled = false; }
+  });
 }
 
 searchInput.addEventListener('input', () => {
@@ -2420,13 +2764,14 @@ if (mobileSortFilter) {
   });
 }
 
-refreshBtn.addEventListener('click', () => refreshSessionAndLibrary({ goHome: false }));
-
 homeBtn.addEventListener('click', () => {
   detailState = null;
   currentView = 'home';
   renderCurrentView();
 });
+
+movieNightBtn.addEventListener('click', openMobileMovieNight);
+suggestionBtn.addEventListener('click', openMobileSuggestion);
 
 mobileNav.addEventListener('click', (event) => {
   const button = event.target.closest('.nav-btn');
@@ -2437,8 +2782,32 @@ mobileNav.addEventListener('click', (event) => {
 });
 
 backBtn.addEventListener('click', closePlayer);
+skipIntroBtn.addEventListener('click', () => {
+  const introEnd = Number(currentPlayerItem?.playbackMarkers?.introEnd);
+  if (!Number.isFinite(introEnd)) return;
+  player.currentTime = introEnd;
+  player.play().catch(() => {});
+  updatePlayerMarkerActions();
+});
+nextEpisodeBtn.addEventListener('click', () => {
+  if (currentPlayerNextEpisode) openPlayer(currentPlayerNextEpisode);
+});
 setPlayerButtonIcon(skipBackBtn, 'replay', 'Go back 5 seconds');
 setPlayerButtonIcon(skipForwardBtn, 'forward', 'Go forward 5 seconds');
+
+qualityBtn.addEventListener('click', (event) => {
+  event.stopPropagation();
+  const open = !qualityMenu.classList.contains('open');
+  qualityMenu.classList.toggle('open', open);
+  qualityBtn.setAttribute('aria-expanded', String(open));
+  showPlayerControls(false);
+});
+qualityGroup.addEventListener('click', (event) => event.stopPropagation());
+document.addEventListener('click', (event) => {
+  if (event.target.closest('#qualityGroup')) return;
+  qualityMenu.classList.remove('open');
+  qualityBtn.setAttribute('aria-expanded', 'false');
+});
 
 playPauseBtn.addEventListener('click', togglePlayerPlayback);
 player.addEventListener('click', handleStageSingleClick);

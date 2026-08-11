@@ -38,7 +38,7 @@ function resolveFfprobePath() {
 async function inspectMediaFile(filePath) {
   try {
     const { stdout } = await execFileAsync(resolveFfprobePath(), [
-      '-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', filePath,
+      '-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', '-show_chapters', filePath,
     ], {
       encoding: 'utf8',
       timeout: 30000,
@@ -50,6 +50,7 @@ async function inspectMediaFile(filePath) {
     const video = streams.find((stream) => stream.codec_type === 'video') || {};
     const audio = streams.find((stream) => stream.codec_type === 'audio') || {};
     const duration = Number(video.duration || parsed.format?.duration);
+    const markers = detectChapterPlaybackMarkers(parsed.chapters, duration);
     return {
       durationSeconds: duration > 0 ? duration : null,
       container: String(parsed.format?.format_name || '').split(',')[0] || null,
@@ -57,10 +58,66 @@ async function inspectMediaFile(filePath) {
       audioCodec: audio.codec_name || null,
       width: Number(video.width) > 0 ? Number(video.width) : null,
       height: Number(video.height) > 0 ? Number(video.height) : null,
+      ...markers,
+      markerScanVersion: 1,
     };
   } catch (err) {
     return { probeError: err.message || 'ffprobe failed' };
   }
+}
+
+function detectChapterPlaybackMarkers(chapters, durationSeconds) {
+  const result = {};
+  let detectedFromChapter = false;
+  for (const chapter of Array.isArray(chapters) ? chapters : []) {
+    const title = String(chapter?.tags?.title || chapter?.tags?.TITLE || '').trim().toLowerCase();
+    const start = Number(chapter?.start_time);
+    const end = Number(chapter?.end_time);
+    if (!title || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    if (/\b(intro|opening|opening credits|theme)\b/.test(title) && !Number.isFinite(result.introEnd)) {
+      result.introStart = Math.max(0, start);
+      result.introEnd = end;
+      result.introConfidence = 0.98;
+      detectedFromChapter = true;
+    }
+    if (/\b(credits|end credits|closing|outro)\b/.test(title) && !Number.isFinite(result.creditsStart)) {
+      result.creditsStart = Math.max(0, start);
+      result.creditsConfidence = 0.98;
+      detectedFromChapter = true;
+    }
+  }
+
+  const duration = Number(durationSeconds);
+  if (!Number.isFinite(result.creditsStart) && duration > 180) {
+    const estimatedCreditsLength = duration <= 35 * 60 ? 75 : 120;
+    result.creditsStart = Math.max(30, duration - estimatedCreditsLength);
+    result.creditsConfidence = 0.35;
+  }
+  result.markerSource = detectedFromChapter ? 'chapter' : 'duration-estimate';
+  return result;
+}
+
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function inferSeasonPlaybackMarkers(showId, seasonNumber) {
+  if (!showId || !Number.isFinite(seasonNumber)) return {};
+  const rows = getDb().prepare(`
+    SELECT intro_start, intro_end, credits_start
+    FROM media_items
+    WHERE media_type = 'episode' AND show_id = ? AND season_number = ?
+      AND (intro_end IS NOT NULL OR credits_start IS NOT NULL)
+  `).all(showId, seasonNumber);
+  const introRows = rows.filter((row) => Number.isFinite(row.intro_start) && Number.isFinite(row.intro_end) && row.intro_end > row.intro_start);
+  return {
+    introStart: median(introRows.map((row) => row.intro_start)),
+    introEnd: median(introRows.map((row) => row.intro_end)),
+    creditsStart: median(rows.map((row) => row.credits_start)),
+  };
 }
 
 async function walkFiles(rootPath) {
@@ -340,8 +397,24 @@ class MediaScanner {
 
     let inspection = {};
     let metadata = {};
-    if (!unchanged) {
+    const needsMarkerInspection = mediaType === 'episode' && Number(existing?.marker_scan_version || 0) < 1;
+    if (!unchanged || needsMarkerInspection) {
       inspection = await this.inspectMedia(resolvedPath);
+    }
+    if (mediaType === 'episode' && Object.keys(inspection).length && !inspection.probeError) {
+      const seasonMarkers = inferSeasonPlaybackMarkers(show?.id, tvInfo?.season);
+      if (!Number.isFinite(inspection.introEnd) && Number.isFinite(seasonMarkers.introEnd)) {
+        inspection.introStart = seasonMarkers.introStart;
+        inspection.introEnd = seasonMarkers.introEnd;
+        inspection.introConfidence = 0.7;
+        inspection.markerSource = 'season-template';
+      }
+      if (Number.isFinite(seasonMarkers.creditsStart)) {
+        inspection.creditsStart = seasonMarkers.creditsStart;
+        inspection.creditsConfidence = 0.55;
+        if (inspection.markerSource === 'duration-estimate') inspection.markerSource = 'season-template';
+      }
+      inspection.markerScanVersion = 1;
     }
     const needsMetadata = !existing?.metadata_locked && (
       mediaType === 'movie'
@@ -385,6 +458,7 @@ class MediaScanner {
 
 module.exports = {
   MediaScanner,
+  detectChapterPlaybackMarkers,
   detectSubtitleLanguage,
   findMatchingSubtitles,
   inspectMediaFile,

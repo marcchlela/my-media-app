@@ -13,6 +13,7 @@ myflix-electric/assets/*
 !myflix-electric/assets/generated-3d
 myflix-electric/assets/generated-3d/*
 !myflix-electric/assets/generated-3d/*-web.webp
+!myflix-electric/assets/generated-3d/cinema-room-v3.png
 *.log
 *.sqlite
 *.sqlite-shm
