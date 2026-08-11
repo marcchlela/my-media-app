@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$assets = Join-Path $root 'mobile-client\assets'
+$icons = Join-Path $PSScriptRoot 'icons'
 $webIcons = Join-Path $root 'web\icons'
-New-Item -ItemType Directory -Force -Path $assets, $webIcons | Out-Null
+New-Item -ItemType Directory -Force -Path $icons, $webIcons | Out-Null
 $edge = @(
   (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
   (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe')
@@ -26,15 +26,12 @@ function Export-Png([string]$source, [string]$target, [int]$size, [bool]$transpa
   }
 }
 
-Export-Png (Join-Path $PSScriptRoot 'icon-general.svg') (Join-Path $assets 'icon-general-1024.png') 1024
-Export-Png (Join-Path $PSScriptRoot 'icon-electric-lounge.svg') (Join-Path $assets 'icon-electric-lounge-1024.png') 1024
-Export-Png (Join-Path $PSScriptRoot 'adaptive-foreground.svg') (Join-Path $assets 'adaptive-icon-foreground.png') 1024 $true
-Export-Png (Join-Path $PSScriptRoot 'adaptive-monochrome.svg') (Join-Path $assets 'adaptive-icon-monochrome.png') 1024 $true
-Export-Png (Join-Path $PSScriptRoot 'splash-icon.svg') (Join-Path $assets 'splash-icon.png') 512 $true
+Export-Png (Join-Path $icons 'icon-general.svg') (Join-Path $icons 'icon-general-1024.png') 1024
+Export-Png (Join-Path $icons 'icon-electric-lounge.svg') (Join-Path $icons 'icon-electric-lounge-1024.png') 1024
 $webSource = if ($env:MYFLIX_WEB_ICON_VARIANT -eq 'electric') {
-  Join-Path $PSScriptRoot 'icon-electric-lounge.svg'
+  Join-Path $icons 'icon-electric-lounge.svg'
 } else {
-  Join-Path $PSScriptRoot 'icon-general.svg'
+  Join-Path $icons 'icon-general.svg'
 }
 Export-Png $webSource (Join-Path $webIcons 'icon-512.png') 512
 Export-Png $webSource (Join-Path $webIcons 'icon-192.png') 192

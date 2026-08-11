@@ -1,7 +1,0 @@
-node_modules/
-.expo/
-dist/
-web-build/
-*.log
-.env*
-!.env.example

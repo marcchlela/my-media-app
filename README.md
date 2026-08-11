@@ -1,6 +1,6 @@
 # MyFlix
 
-MyFlix is a private self-hosted home media system for its owner and explicitly permitted family or friends. It is not a public service or store-distributed product. Its clients are the responsive web app, Safari/Chrome Add to Home Screen, Electron, and a separate Expo SDK 54 native client normally run through Expo Go. Private remote access is designed around a Tailscale tailnet, never public exposure.
+MyFlix is a private self-hosted home media system for its owner and explicitly permitted family or friends. It is not a public service or store-distributed product. Its user-facing clients are the responsive Electric Lounge web app in a browser or Home Screen installation, plus the optional Electron desktop shell. Private remote access is designed around a Tailscale tailnet, never public exposure.
 
 Original-quality direct play remains the default; the server can also generate reusable HLS quality variants on demand.
 
@@ -17,7 +17,7 @@ Original-quality direct play remains the default; the server can also generate r
 
 `library.json` is not a server runtime source. On first startup, an existing file may be imported once to preserve IDs/metadata where practical. SQLite remains authoritative afterward.
 
-The React Native client lives in [`mobile-client/`](mobile-client/README.md). Its dependencies are isolated and excluded from Docker. `/desktop` and `/mobile` remain the responsive Electric Lounge browser client. On iPhone, the primary independent Home Screen experience is Safari **Add to Home Screen**; Expo Go is the native development/runtime option.
+`/desktop` and `/mobile` serve the same responsive Electric Lounge application. On phones and tablets, open `/mobile` in Safari or Chrome and use the browser's **Add to Home Screen** or install action for a standalone MyFlix experience with the General icon.
 
 ## Modes
 

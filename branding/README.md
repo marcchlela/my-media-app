@@ -1,8 +1,8 @@
 # MyFlix Branding
 
-- `icon-general.svg` is the default cross-theme MyFlix mark: a cinematic ribbon M with film-edge details.
-- `icon-electric-lounge.svg` is the Electric Lounge edition: a burgundy admission ticket, screening room, brass marquee, and lounge seat.
-- `adaptive-foreground.svg`, `adaptive-monochrome.svg`, and `splash-icon.svg` are production source assets for the Expo client.
+- `icons/icon-general.svg` is the editable default cross-theme MyFlix mark: a cinematic ribbon M with film-edge details.
+- `icons/icon-electric-lounge.svg` is the editable Electric Lounge edition: a burgundy admission ticket, screening room, brass marquee, and lounge seat.
+- `icons/icon-general-1024.png` and `icons/icon-electric-lounge-1024.png` are the full-size production exports of those concepts.
 
 Run `powershell -ExecutionPolicy Bypass -File branding/export-icons.ps1` from the repository root to regenerate PNG exports. The script uses an installed Microsoft Edge browser as a standards-compliant SVG renderer.
 

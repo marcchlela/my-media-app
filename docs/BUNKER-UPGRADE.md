@@ -64,7 +64,7 @@ docker compose up -d --build
 docker compose logs --tail=200 myflix
 ```
 
-The Docker image remains Node-only plus server FFmpeg/Chromaprint packages. `mobile-client/` is excluded from its build context.
+The Docker image remains Node-only plus server FFmpeg/Chromaprint packages and the responsive web runtime assets. Development/design source folders remain excluded from its build context.
 
 ## Verify data and services
 
@@ -129,7 +129,7 @@ If `lm-sensors` is already installed and configured, monitor `sensors`; do not i
 
 17. After local playback is stable, follow [`TAILSCALE.md`](TAILSCALE.md): install Tailscale on the host, use private Serve HTTPS, never Funnel, and test from cellular.
 
-18. Set the exact Serve URL in the Expo Go client's connection screen. The native client has not yet been connected to the bunker; do not hardcode or rebuild anything to change servers.
+18. Open the exact private Serve URL followed by `/mobile` in Safari or Chrome. Sign in, add MyFlix to the Home Screen, launch it from the installed icon, and repeat the playback checks outside the home network. No client rebuild is needed when the private URL changes.
 
 ## Rollback
 

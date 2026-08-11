@@ -5,7 +5,7 @@ This is a future procedure for `chlela-bunker`; do not run it from the MyFlix co
 ## Intended path
 
 ```text
-iPhone / Android -> private tailnet -> Tailscale Serve HTTPS
+Phone / tablet / laptop -> private tailnet -> Tailscale Serve HTTPS
 -> chlela-bunker host -> http://127.0.0.1:3000 -> MyFlix Docker
 ```
 
@@ -56,18 +56,18 @@ COOKIE_SECURE=true
 TRUST_PROXY=true
 ```
 
-Native bearer authentication does not depend on cookies, but secure cookies protect browser sessions behind HTTPS. Do not add the URL to `ALLOWED_ORIGINS` for same-origin `/desktop` or `/mobile` use.
+Secure cookies protect browser sessions behind HTTPS. Do not add the URL to `ALLOWED_ORIGINS` for same-origin `/desktop` or `/mobile` use.
 
 ## Phone configuration
 
 1. Install Tailscale on iOS or Android.
 2. Sign into the same tailnet and confirm `chlela-bunker` is reachable. Family or friends must each be explicitly invited or granted access through the private tailnet policy.
-3. In the native MyFlix client, choose **Change MyFlix Server**.
-4. Enter the exact HTTPS URL printed by `tailscale serve status` without a trailing path.
-5. Test the connection and sign in with the existing MyFlix account.
+3. Open the exact HTTPS URL printed by `tailscale serve status`, followed by `/mobile`, in Safari or Chrome.
+4. Sign in with the existing MyFlix account and use the browser's **Add to Home Screen** or install action.
+5. Launch MyFlix from its Home Screen icon and confirm it opens in standalone mode with the expected branding.
 6. Disable Wi-Fi temporarily and test on cellular. Confirm library images, Direct playback, Range seeking, subtitles, HLS fallback, progress sync, and favorites.
 
-If the app cannot connect, confirm both devices are online, MyFlix `/health` works on the host, Tailscale is connected, ACLs permit access, and `tailscale serve status` still shows the proxy. The app's connectivity message intentionally does not assume Tailscale is always the cause.
+If the web app cannot connect, confirm both devices are online, MyFlix `/health` works on the host, Tailscale is connected, ACLs permit access, and `tailscale serve status` still shows the proxy.
 
 ## Stop or reset Serve
 
