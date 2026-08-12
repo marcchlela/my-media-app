@@ -63,6 +63,8 @@ let qualityRequestToken = 0;
 let streamSessionId = '';
 let streamHeartbeatTimer = null;
 let playbackMode = 'direct';
+let playbackState = 'idle';
+let automaticFallbackAttempted = false;
 
 const movieDetailCache = new Map();
 const showDetailCache = new Map();
@@ -131,6 +133,10 @@ async function apiGet(path, query = {}) {
 
 function prefersReducedMotion() {
   return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+function isMobileLayout() {
+  return !!window.matchMedia?.('(max-width: 700px)').matches;
 }
 
 function getCinemaSoundsEnabled() {
@@ -208,6 +214,10 @@ function requestPlayerFullscreen() {
 }
 
 async function beginPlayback(action) {
+  if (isMobileLayout()) {
+    action();
+    return;
+  }
   if (prefersReducedMotion() || cinemaTransitionActive) {
     action();
     requestPlayerFullscreen();
@@ -1159,8 +1169,9 @@ function createShelf(titleText, body, options = {}) {
   title.textContent = titleText;
   const actions = document.createElement('div');
   actions.className = 'home-shelf-actions';
+  let seeAll = null;
   if (options.view) {
-    const seeAll = document.createElement('button');
+    seeAll = document.createElement('button');
     seeAll.className = 'home-see-all';
     seeAll.textContent = `See All ${titleText}`;
     seeAll.addEventListener('click', () => {
@@ -1188,6 +1199,7 @@ function createShelf(titleText, body, options = {}) {
     const updateRailButtons = () => {
       const overflow = body.scrollWidth > body.clientWidth + 4;
       railButtons.forEach((button) => { button.hidden = !overflow; });
+      if (seeAll && isMobileLayout()) seeAll.hidden = !overflow;
       if (!overflow) return;
       railButtons[0].disabled = body.scrollLeft <= 4;
       railButtons[1].disabled = body.scrollLeft + body.clientWidth >= body.scrollWidth - 4;
@@ -1237,7 +1249,7 @@ function getFeaturedEntries(movies, shows) {
 }
 
 function renderFeaturedHero(movies, shows) {
-  const entries = getFeaturedEntries(movies, shows).slice(0, 2);
+  const entries = getFeaturedEntries(movies, shows).slice(0, isMobileLayout() ? 1 : 2);
   const wrap = document.createElement('div');
   wrap.className = 'featured-hero-wrap';
   if (!entries.length) return wrap;
@@ -1709,8 +1721,7 @@ function renderAccount() {
         save.click();
       });
       heading.replaceWith(form);
-      editBtn.replaceWith(save);
-      actions.insertBefore(cancel, logoutBtn);
+      actions.replaceChildren(save, logoutBtn, cancel, passwordBtn);
       firstName.focus();
       firstName.select();
     });
@@ -2917,6 +2928,16 @@ function renderDetailHeader(title, onBack) {
   return { actions, heading };
 }
 
+function createDetailsDisclosure(metaGrid) {
+  const disclosure = document.createElement('details');
+  disclosure.className = 'mobile-details-disclosure';
+  disclosure.open = !isMobileLayout();
+  const summary = document.createElement('summary');
+  summary.innerHTML = '<span>Cast and details</span><span class="details-disclosure-icon" aria-hidden="true"></span>';
+  disclosure.append(summary, metaGrid);
+  return disclosure;
+}
+
 function renderMovieDetailCard(item, meta) {
   content.innerHTML = '';
   statusText.textContent = '';
@@ -3012,6 +3033,7 @@ function renderMovieDetailCard(item, meta) {
 
   metaGrid.appendChild(leftCard);
   metaGrid.appendChild(rightCard);
+  const detailsDisclosure = createDetailsDisclosure(metaGrid);
 
   const play = document.createElement('button');
   play.className = 'solid-btn details-play-primary';
@@ -3068,7 +3090,7 @@ function renderMovieDetailCard(item, meta) {
   body.appendChild(titleRow);
   body.appendChild(overview);
   body.appendChild(separator);
-  body.appendChild(metaGrid);
+  body.appendChild(detailsDisclosure);
   body.appendChild(actionRow);
 
   card.appendChild(posterFrame);
@@ -3172,6 +3194,7 @@ function renderShowDetailCard(group, meta) {
 
   metaGrid.appendChild(leftCard);
   metaGrid.appendChild(rightCard);
+  const detailsDisclosure = createDetailsDisclosure(metaGrid);
 
   const actionRow = document.createElement('div');
   actionRow.className = 'actions';
@@ -3204,7 +3227,7 @@ function renderShowDetailCard(group, meta) {
   body.appendChild(titleRow);
   body.appendChild(overview);
   body.appendChild(separator);
-  body.appendChild(metaGrid);
+  body.appendChild(detailsDisclosure);
   if (actionRow.childElementCount) {
     body.appendChild(actionRow);
   }
@@ -3426,6 +3449,9 @@ function updateNavActive() {
 function updateSearchVisibility() {
   const hide = currentView === 'account' || currentView === 'settings' || !!detailState;
   searchInput.style.display = hide ? 'none' : '';
+  const hideMobileActions = isMobileLayout() && !!detailState;
+  movieNightBtn.style.display = hideMobileActions ? 'none' : '';
+  suggestionBtn.style.display = hideMobileActions ? 'none' : '';
   if (mobileFiltersWrap) {
     mobileFiltersWrap.style.display = hide ? 'none' : '';
   }
@@ -3502,8 +3528,8 @@ function renderQualityMenu(options = null) {
   qualityBtn.disabled = false;
   const choices = [
     { label: 'Original', detail: 'Direct play' },
-    { label: 'Auto', detail: 'Best for connection' },
-    ...(options.qualities || []).map((quality) => ({ label: quality.label, detail: 'Adaptive stream' })),
+    { label: 'Auto', detail: 'Adaptive stream' },
+    ...(options.qualities || []).map((quality) => ({ label: quality.label, detail: 'Single server rendition' })),
   ];
   choices.forEach((choice) => {
     const button = document.createElement('button');
@@ -3518,10 +3544,13 @@ function renderQualityMenu(options = null) {
 
 function restoreDirectPlayback() {
   if (!currentPlayerItem) return;
+  qualityRequestToken += 1;
   const resumeAt = Number(player.currentTime) || 0;
   const shouldPlay = !player.paused;
   destroyAdaptivePlayback();
   playbackMode = 'direct';
+  playbackState = 'direct-loading';
+  automaticFallbackAttempted = false;
   player.src = currentPlayerItem.streamUrl;
   player.load();
   player.addEventListener('loadedmetadata', () => {
@@ -3533,12 +3562,13 @@ function restoreDirectPlayback() {
   sendStreamHeartbeat();
 }
 
-function attachAdaptivePlayback(masterUrl, quality, requestToken) {
+function attachAdaptivePlayback(masterUrl, quality, requestToken, mode = 'adaptive') {
   if (!currentPlayerItem || requestToken !== qualityRequestToken) return;
   const resumeAt = Number(player.currentTime) || 0;
-  const shouldPlay = !player.paused;
+  const shouldPlay = mode === 'compatibility' || !player.paused;
   if (activeHls) activeHls.destroy();
-  playbackMode = quality === 'Auto' ? 'hls-auto' : 'hls-manual';
+  playbackMode = mode === 'compatibility' ? 'hls-fallback' : quality === 'Auto' ? 'hls-auto' : 'hls-manual';
+  playbackState = 'hls-preparing';
   if (window.Hls?.isSupported()) {
     const hls = new window.Hls({ startPosition: resumeAt, enableWorker: true });
     activeHls = hls;
@@ -3554,13 +3584,18 @@ function attachAdaptivePlayback(masterUrl, quality, requestToken) {
       }
       if (resumeAt > 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(resumeAt, Math.max(0, player.duration - 0.1));
       if (shouldPlay) player.play().catch(() => {});
+      playbackState = 'hls-playing';
       setPlayerStatus('');
       sendStreamHeartbeat();
     });
     hls.on(window.Hls.Events.ERROR, (_event, data) => {
       if (!data.fatal) return;
-      setPlayerStatus('Adaptive playback failed. Returning to original quality.', true);
-      restoreDirectPlayback();
+      playbackState = 'hls-failed';
+      setPlayerStatus(mode === 'compatibility'
+        ? 'Compatible playback also failed. This file may need to be converted on the server.'
+        : 'The selected stream could not be played. Choose Original or another quality.', true);
+      hls.destroy();
+      if (activeHls === hls) activeHls = null;
     });
   } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
     player.src = masterUrl;
@@ -3568,10 +3603,12 @@ function attachAdaptivePlayback(masterUrl, quality, requestToken) {
     player.addEventListener('loadedmetadata', () => {
       if (resumeAt > 0) player.currentTime = resumeAt;
       if (shouldPlay) player.play().catch(() => {});
+      playbackState = 'hls-playing';
+      setPlayerStatus('');
     }, { once: true });
   } else {
-    setPlayerStatus('Adaptive playback is not supported by this browser.', true);
-    restoreDirectPlayback();
+    playbackState = 'hls-failed';
+    setPlayerStatus('HLS playback is not supported by this browser.', true);
     return;
   }
   updateQualityButton(quality);
@@ -3586,24 +3623,66 @@ async function selectPlaybackQuality(quality) {
   }
   if (!currentPlayerItem || !playbackOptions?.hlsAvailable) return;
   const requestToken = ++qualityRequestToken;
+  const mode = quality === 'Auto' ? 'adaptive' : 'manual';
+  const requestedHeight = quality === 'Auto' ? undefined : Number.parseInt(quality, 10);
   updateQualityButton(quality);
+  playbackState = 'hls-preparing';
   setPlayerStatus('Preparing adaptive qualities on the server...');
   try {
-    let response = await apiRequest(`/api/media/${encodeURIComponent(currentPlayerItem.id)}/hls`, { method: 'POST', body: {} });
+    let response = await apiRequest(`/api/media/${encodeURIComponent(currentPlayerItem.id)}/hls`, {
+      method: 'POST',
+      body: { mode, quality: requestedHeight },
+    });
     let status = response.status;
     while (status?.state !== 'ready') {
       if (requestToken !== qualityRequestToken || !currentPlayerItem) return;
-      if (status?.state === 'failed') throw new Error(status.error || 'Adaptive stream generation failed.');
+      if (status?.state === 'failed' || status?.state === 'cancelled') throw new Error(status.error || 'Adaptive stream generation did not complete.');
+      if (!['queued', 'running'].includes(status?.state)) throw new Error('The server no longer has this stream-generation job. Choose the quality again.');
       setPlayerStatus(`${status?.message || 'Generating adaptive stream'}${Number.isFinite(status?.progress) ? ` (${Math.round(status.progress)}%)` : ''}`);
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      response = await apiRequest(`/api/media/${encodeURIComponent(currentPlayerItem.id)}/hls/status`);
+      response = await apiRequest(`/api/media/${encodeURIComponent(currentPlayerItem.id)}/hls/status?cacheKey=${encodeURIComponent(status.cacheKey)}`);
       status = response.status;
     }
-    attachAdaptivePlayback(status.masterUrl, quality, requestToken);
+    attachAdaptivePlayback(status.masterUrl, quality, requestToken, mode);
   } catch (err) {
     if (requestToken !== qualityRequestToken) return;
-    updateQualityButton('Original');
+    playbackState = 'hls-failed';
     setPlayerStatus(err.message || 'Could not prepare adaptive playback.', true);
+  }
+}
+
+async function startCompatibilityFallback() {
+  if (!currentPlayerItem || automaticFallbackAttempted || playbackMode !== 'direct') return;
+  automaticFallbackAttempted = true;
+  playbackState = 'direct-failed';
+  const requestToken = ++qualityRequestToken;
+  const mediaId = currentPlayerItem.id;
+  const resumeAt = Number(player.currentTime) || 0;
+  setPlayerStatus('Preparing a compatible stream on the server...');
+  try {
+    let response = await apiRequest(`/api/media/${encodeURIComponent(mediaId)}/hls`, {
+      method: 'POST',
+      body: { mode: 'compatibility' },
+    });
+    let status = response.status;
+    while (status?.state !== 'ready') {
+      if (requestToken !== qualityRequestToken || currentPlayerItem?.id !== mediaId) return;
+      if (status?.state === 'failed' || status?.state === 'cancelled') throw new Error(status.error || 'Compatible stream generation did not complete.');
+      if (!['queued', 'running'].includes(status?.state)) throw new Error('The server no longer has this compatibility job. Try playback again.');
+      playbackState = 'hls-preparing';
+      setPlayerStatus(`${status?.message || 'Preparing compatible stream'}${Number.isFinite(status?.progress) ? ` (${Math.round(status.progress)}%)` : ''}`);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      response = await apiRequest(`/api/media/${encodeURIComponent(mediaId)}/hls/status?cacheKey=${encodeURIComponent(status.cacheKey)}`);
+      status = response.status;
+    }
+    if (requestToken !== qualityRequestToken || currentPlayerItem?.id !== mediaId) return;
+    player.currentTime = resumeAt;
+    const compatibilityQuality = String(status.qualities?.[0] || `${playbackOptions?.compatibilityFallback?.targetHeight || 720}p`);
+    attachAdaptivePlayback(status.masterUrl, compatibilityQuality, requestToken, 'compatibility');
+  } catch (err) {
+    if (requestToken !== qualityRequestToken) return;
+    playbackState = 'hls-failed';
+    setPlayerStatus(err.message || 'This video could not be converted for compatible playback.', true);
   }
 }
 
@@ -3660,10 +3739,13 @@ function startStreamHeartbeat() {
 
 function openPlayer(item) {
   if (!item.streamUrl) return;
+  qualityRequestToken += 1;
   destroyAdaptivePlayback();
   clearStreamHeartbeat();
   currentPlayerItem = item;
   playbackMode = 'direct';
+  playbackState = 'direct-loading';
+  automaticFallbackAttempted = false;
   playbackOptions = null;
   selectedPlaybackQuality = 'Original';
   currentPlayerNextEpisode = null;
@@ -3704,15 +3786,18 @@ function openPlayer(item) {
 
   player.onwaiting = () => setPlayerStatus('Loading video...');
   player.onstalled = () => setPlayerStatus('Network is slow. Still trying...', false);
-  player.onplaying = () => setPlayerStatus('');
+  player.onplaying = () => {
+    playbackState = playbackMode === 'direct' ? 'direct-playing' : 'hls-playing';
+    setPlayerStatus('');
+  };
   player.oncanplay = () => setPlayerStatus('');
   player.onerror = () => {
-    const maybeUnsupported = item.mimeType && !player.canPlayType(item.mimeType);
-    if (maybeUnsupported) {
-      setPlayerStatus('This format is likely not supported on this device. MP4 is recommended.', true);
+    if (playbackMode === 'direct') {
+      startCompatibilityFallback();
       return;
     }
-    setPlayerStatus('Could not play this video. Please try another file.', true);
+    playbackState = 'hls-failed';
+    setPlayerStatus('The compatible stream could not be played on this device.', true);
   };
 
   let lastProgressSave = 0;
@@ -3820,6 +3905,7 @@ function openPlayer(item) {
 }
 
 function closePlayer() {
+  qualityRequestToken += 1;
   if (Number.isFinite(player.duration) && player.duration > 0) {
     if (currentPlayerItem) {
       saveWatchProgress(currentPlayerItem, player.currentTime, player.duration, false);
@@ -3845,6 +3931,8 @@ function closePlayer() {
   setPlayerStatus('');
   playerView.classList.add('hidden');
   currentPlayerItem = null;
+  playbackState = 'idle';
+  automaticFallbackAttempted = false;
   playbackOptions = null;
   qualityMenu.classList.remove('open');
   qualityBtn.setAttribute('aria-expanded', 'false');
@@ -4017,6 +4105,68 @@ function openMovieNight() {
   });
 }
 
+function normalizeSuggestionText(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function suggestionEditDistance(first, second) {
+  const a = String(first || '');
+  const b = String(second || '');
+  const row = Array.from({ length: b.length + 1 }, (_value, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const beforeUpdate = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+      previous = beforeUpdate;
+    }
+  }
+  return row[b.length];
+}
+
+function suggestionSimilarity(first, second) {
+  const longest = Math.max(first.length, second.length);
+  return longest ? 1 - (suggestionEditDistance(first, second) / longest) : 1;
+}
+
+function scoreSuggestionMatch(queryText, match) {
+  const query = normalizeSuggestionText(queryText);
+  const title = normalizeSuggestionText(match.title || match.name);
+  const queryWords = query.split(' ').filter(Boolean);
+  const titleWords = title.split(' ').filter(Boolean);
+  const wordScore = queryWords.length
+    ? queryWords.reduce((total, word) => total + Math.max(0, ...titleWords.map((titleWord) => suggestionSimilarity(word, titleWord))), 0) / queryWords.length
+    : 0;
+  return Math.max(suggestionSimilarity(query, title), wordScore);
+}
+
+async function searchSuggestionTitles(routeType, searchText) {
+  const exact = await apiGet(`/api/tmdb/${routeType}/search`, { q: searchText });
+  if (exact.results?.length) return { matches: exact.results.slice(0, 8), broadened: false };
+
+  const tokens = [...new Set(normalizeSuggestionText(searchText).split(' ').filter((token) => token.length >= 3))].slice(0, 3);
+  const responses = await Promise.all(tokens.map((token) => (
+    apiGet(`/api/tmdb/${routeType}/search`, { q: token }).catch(() => ({ results: [] }))
+  )));
+  const unique = new Map();
+  responses.flatMap((payload) => payload.results || []).forEach((match) => {
+    if (match?.id && !unique.has(match.id)) unique.set(match.id, match);
+  });
+  const ranked = [...unique.values()]
+    .map((match) => ({ match, score: scoreSuggestionMatch(searchText, match) }))
+    .filter((entry) => entry.score >= 0.5)
+    .sort((first, second) => second.score - first.score || Number(second.match.popularity || 0) - Number(first.match.popularity || 0))
+    .slice(0, 8)
+    .map((entry) => entry.match);
+  return { matches: ranked, broadened: true };
+}
+
 function openSuggestionDialog() {
   if (!currentUser) {
     openAuthModal('login');
@@ -4081,9 +4231,11 @@ function openSuggestionDialog() {
     note.value = '';
     try {
       const routeType = type.value === 'show' ? 'tv' : 'movie';
-      const payload = await apiGet(`/api/tmdb/${routeType}/search`, { q: searchText });
-      const matches = (payload.results || []).slice(0, 8);
-      message.textContent = matches.length ? 'Choose the exact version you mean.' : 'No matching title was found.';
+      const searchResult = await searchSuggestionTitles(routeType, searchText);
+      const matches = searchResult.matches;
+      message.textContent = matches.length
+        ? (searchResult.broadened ? 'No exact spelling match. These close titles may be what you meant.' : 'Choose the exact version you mean.')
+        : 'No matching title was found. Try fewer words or check the spelling.';
       matches.forEach((match) => {
         const button = document.createElement('button');
         button.type = 'button';

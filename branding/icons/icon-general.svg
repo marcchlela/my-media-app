@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="78%">
+      <stop offset="0" stop-color="#321820"/>
+      <stop offset="0.62" stop-color="#150c0f"/>
+      <stop offset="1" stop-color="#080607"/>
+    </radialGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b52d43"/>
+      <stop offset="0.48" stop-color="#761526"/>
+      <stop offset="1" stop-color="#410b16"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe4a6"/>
+      <stop offset="0.45" stop-color="#d4a85d"/>
+      <stop offset="1" stop-color="#7a4d20"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="32" stdDeviation="28" flood-color="#000" flood-opacity=".65"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <circle cx="512" cy="500" r="386" fill="none" stroke="#d4a85d" stroke-opacity=".12" stroke-width="3"/>
+  <circle cx="512" cy="500" r="336" fill="none" stroke="#d4a85d" stroke-opacity=".08" stroke-width="2"/>
+  <g filter="url(#shadow)">
+    <path d="M234 752V286c0-34 40-51 64-27l214 222 214-222c24-24 64-7 64 27v466h-132V478L512 630 366 478v274z" fill="url(#ribbon)" stroke="url(#gold)" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M512 482v148" stroke="#ffd98c" stroke-width="18" stroke-linecap="round"/>
+    <path d="M278 337v363M746 337v363" stroke="#f4c878" stroke-opacity=".48" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <g fill="#e8bb68" opacity=".9">
+    <rect x="255" y="391" width="18" height="35" rx="5"/><rect x="255" y="478" width="18" height="35" rx="5"/><rect x="255" y="565" width="18" height="35" rx="5"/>
+    <rect x="751" y="391" width="18" height="35" rx="5"/><rect x="751" y="478" width="18" height="35" rx="5"/><rect x="751" y="565" width="18" height="35" rx="5"/>
+  </g>
+</svg>

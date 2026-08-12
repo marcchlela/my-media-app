@@ -1,6 +1,8 @@
 # MyFlix
 
-MyFlix is a self-hosted media catalog with desktop web, mobile web, and Electron clients. Original-quality direct play remains the default; the server can also generate reusable adaptive HLS quality variants on demand.
+MyFlix is a private self-hosted home media system for its owner and explicitly permitted family or friends. It is not a public service or store-distributed product. Its user-facing clients are the responsive Electric Lounge web app in a browser or Home Screen installation, plus the optional Electron desktop shell. Private remote access is designed around a Tailscale tailnet, never public exposure.
+
+Original-quality direct play remains the default; the server can also generate reusable HLS quality variants on demand.
 
 ## Architecture
 
@@ -9,11 +11,13 @@ MyFlix is a self-hosted media catalog with desktop web, mobile web, and Electron
 - Server clients receive stable media/show IDs. Absolute server paths are never returned by the library API.
 - `ffprobe` runs only when a file is new or changed. It records duration, codecs, container, and dimensions.
 - Original playback uses HTTP byte ranges with no conversion.
-- Choosing Auto or a specific quality asks FFmpeg to generate cached HLS variants under `DATA_DIR/cache/hls`. The first request takes time; later playback reuses the cache until the source file changes.
+- Choosing Auto asks FFmpeg for the adaptive ladder, while an explicit quality generates one manual rendition. A fatal Direct incompatibility automatically requests one cheaper compatibility rendition. All variants are cached separately under `DATA_DIR/cache/hls` and reused until the source size/mtime changes.
 - Chromaprint compares audio fingerprints across episodes in a season to detect recurring intros. Manual markers always remain authoritative.
 - `/admin` is an administrator-only operations dashboard for library, streams, jobs, markers, storage, backups, and server health.
 
 `library.json` is not a server runtime source. On first startup, an existing file may be imported once to preserve IDs/metadata where practical. SQLite remains authoritative afterward.
+
+`/desktop` and `/mobile` serve the same responsive Electric Lounge application. On phones and tablets, open `/mobile` in Safari or Chrome and use the browser's **Add to Home Screen** or install action for a standalone MyFlix experience with the General icon.
 
 ## Modes
 
@@ -74,7 +78,7 @@ Health information is available at `/health`. It contains catalog counts and sou
 
 ### Adaptive quality and hardware acceleration
 
-`TRANSCODE_ACCEL=auto` prefers a usable hardware encoder and falls back to `libx264`. `TRANSCODE_CONCURRENCY=1` protects a small homelab from running several expensive encodes simultaneously. Adaptive outputs are generated once, cached, and reused; this is not continuous live transcoding on every playback.
+`TRANSCODE_ACCEL=auto` prefers a usable hardware encoder and falls back to `libx264`. `TRANSCODE_CONCURRENCY=1` protects a small homelab from running several expensive encodes simultaneously. `TRANSCODE_FALLBACK_HEIGHT=720` caps automatic compatibility mode at one H.264/AAC rendition and never intentionally upscales a lower-resolution source. Adaptive outputs are generated once, cached, and reused; this is not continuous live transcoding on every playback.
 
 For Intel or AMD graphics on Linux, expose the render device by uncommenting the `/dev/dri` device mapping in `compose.yaml`. Confirm the result under **Admin > System**. NVIDIA requires the NVIDIA container runtime in addition to FFmpeg encoder support.
 
