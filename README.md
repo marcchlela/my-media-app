@@ -170,3 +170,5 @@ npm run server
 ```
 
 The test suite uses Node's built-in test runner and temporary media directories. It does not alter real media.
+
+Deployment: chlela-bunker auto-deploy enabled.
